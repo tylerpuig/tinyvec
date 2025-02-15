@@ -242,3 +242,183 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
     return sorted;
 }
+
+size_t insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
+                   const size_t vec_count, const uint32_t dimensions)
+{
+
+    if (dimensions == 0)
+        return 0;
+
+    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+
+    // open vector file
+    // read and write binary, file must exist (r+b)
+    FILE *vec_file = open_db_file(file_path);
+    if (!vec_file)
+    {
+        return 0;
+    }
+
+    VecFileHeaderInfo *header_info = get_vec_file_header_info(vec_file, dimensions);
+    if (!header_info)
+    {
+        printf("Failed to get vector file header info\n");
+        fclose(vec_file);
+        return 0;
+    }
+
+    if (header_info->dimensions != dimensions)
+    {
+        printf("Dimensions don't match: %d vs %d\n", header_info->dimensions, dimensions);
+        fclose(vec_file);
+        return 0;
+    }
+
+    FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
+    if (!vec_file || !md_paths)
+    {
+        if (vec_file)
+            fclose(vec_file);
+        free_metadata_file_paths(md_paths);
+        free(header_info);
+        return 0;
+    }
+    FILE *idx_file = fopen(md_paths->idx_path, "ab");
+    FILE *meta_file = fopen(md_paths->md_path, "ab");
+
+    if (!vec_file || !idx_file || !meta_file)
+    {
+        if (vec_file)
+        {
+            printf("Failed to open vec file\n");
+            fclose(vec_file);
+        }
+        if (idx_file)
+        {
+            printf("Failed to open idx file\n");
+            fclose(idx_file);
+        }
+        if (meta_file)
+        {
+            printf("Failed to open meta file\n");
+            fclose(meta_file);
+        }
+
+        free(header_info);
+        free_metadata_file_paths(md_paths);
+        return 0;
+    }
+
+    printf("vector_count: %lld, dimensions: %d\n", header_info->vector_count, header_info->dimensions, "from write_vectors_batch");
+
+    // After reading dimensions, seek to end for appending
+    fseek(vec_file, 0, SEEK_END);
+
+    // Now calculate total vector size using dimensions
+    size_t total_vec_size = vec_count * header_info->dimensions * sizeof(float);
+
+    // Calculate total sizes needed
+    size_t total_meta_size = 0;
+    for (size_t i = 0; i < vec_count; i++)
+    {
+        total_meta_size += metadata_lengths[i];
+    }
+
+    // Allocate buffers
+    unsigned char *vec_buffer = malloc(total_vec_size);
+    unsigned char *idx_buffer = malloc(vec_count * 12); // 12 bytes per index entry
+    unsigned char *meta_buffer = malloc(total_meta_size);
+
+    if (!vec_buffer || !idx_buffer || !meta_buffer)
+    {
+        free(header_info);
+        free(vec_buffer);
+        free(idx_buffer);
+        free(meta_buffer);
+        fclose(vec_file);
+        fclose(idx_file);
+        fclose(meta_file);
+        return 0;
+    }
+
+    // Get starting metadata offset
+    // uint64_t current_meta_offset = ftell(meta_file);
+    fseek(meta_file, 0, SEEK_END);
+    uint64_t total_meta_size_offset = ftell(meta_file);
+    uint64_t current_meta_offset = total_meta_size_offset;
+
+    // Fill buffers
+    size_t vec_offset = 0;
+    size_t meta_offset = 0;
+    size_t idx_offset = 0;
+
+    size_t vec_size = header_info->dimensions * sizeof(float);
+
+    for (size_t i = 0; i < vec_count; i++)
+    {
+        // Copy vector
+        memcpy(vec_buffer + vec_offset,
+               vectors[i],
+               vec_size);
+        vec_offset += vec_size;
+
+        // Write index entry (offset + length)
+        uint64_t meta_pos = current_meta_offset + meta_offset;
+        uint32_t meta_len = metadata_lengths[i];
+
+        memcpy(idx_buffer + idx_offset, &meta_pos, sizeof(uint64_t));
+        memcpy(idx_buffer + idx_offset + 8, &meta_len, sizeof(uint32_t));
+        idx_offset += 12;
+
+        memcpy(meta_buffer + meta_offset,
+               metadatas[i],
+               metadata_lengths[i]);
+
+        meta_offset += metadata_lengths[i];
+    }
+
+    // Single write for each file
+    fwrite(vec_buffer, 1, total_vec_size, vec_file);
+    fwrite(idx_buffer, 1, vec_count * 12, idx_file);
+    fwrite(meta_buffer, 1, total_meta_size, meta_file);
+
+    // Position at start of file
+    fseek(vec_file, 0, SEEK_SET);
+
+    // Calculate new total count
+    int new_count = header_info->vector_count + vec_count;
+
+    // Write the new vector count
+    fwrite(&new_count, sizeof(int), 1, vec_file);
+
+    // Cleanup
+    free(header_info);
+    free(vec_buffer);
+    free(idx_buffer);
+    free(meta_buffer);
+    fclose(idx_file);
+    fclose(meta_file);
+
+    if (connection)
+    {
+
+        if (connection->idx_mmap)
+        {
+            free_mmap(connection->idx_mmap);
+            connection->idx_mmap = NULL;
+        }
+        if (connection->md_mmap)
+        {
+            free_mmap(connection->md_mmap);
+            connection->md_mmap = NULL;
+        }
+
+        // Create new mmaps
+        connection->idx_mmap = create_mmap(md_paths->idx_path);
+        connection->md_mmap = create_mmap(md_paths->md_path);
+        connection->vec_file = vec_file;
+    }
+
+    return (int)vec_count;
+}

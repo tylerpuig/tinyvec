@@ -218,10 +218,6 @@ VecFileHeaderInfo *get_vec_file_header_info(FILE *vec_file, const uint32_t dimen
 
         fseek(vec_file, start_pos + sizeof(uint32_t), SEEK_SET);
         fwrite(&dimensions, sizeof(uint32_t), 1, vec_file);
-
-        // printf("Dimensions mismatch: file has %u but expected %u\n",
-        //        read_dimensions, dimensions);
-        // return NULL;
     }
 
     VecFileHeaderInfo *header_info = malloc(sizeof(VecFileHeaderInfo));

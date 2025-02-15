@@ -26,8 +26,6 @@ extern "C"
         const char *file_path;
         uint32_t dimensions;
         FILE *vec_file;
-        FILE *idx_file;
-        FILE *md_file;
         MmapInfo *idx_mmap;
         MmapInfo *md_mmap;
     } TinyVecConnection;
@@ -41,6 +39,8 @@ extern "C"
     // Core API functions
     EXPORT TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint32_t dimensions);
     EXPORT IndexFileStats get_index_stats(const char *file_path);
+    EXPORT size_t insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
+                              const size_t vec_count, const uint32_t dimensions);
 
     // Internal functions
     TinyVecConnection *get_tinyvec_connection(const char *file_path);

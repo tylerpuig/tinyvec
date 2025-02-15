@@ -1,7 +1,6 @@
 #ifndef VEC_TYPES_H
 #define VEC_TYPES_H
 
-// #include "cJSON.h"
 #include <stdint.h>
 
 typedef struct MetadataBytes
