@@ -248,7 +248,7 @@ MetadataBytes get_vec_metadata(const MmapInfo *idx_map, const MmapInfo *md_map, 
     // First validate idx_offset is within bounds
     if (idx_offset + 12 > idx_map->size)
     { // Need 12 bytes (8 for offset + 4 for length)
-        printf("Index offset out of bounds: %d > %zu\n", idx_offset + 12, idx_map->size);
+        printf("Index offset out of bounds: %d > %lu\n", idx_offset + 12, (unsigned long)idx_map->size);
         return result;
     }
 
