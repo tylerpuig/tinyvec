@@ -14,16 +14,14 @@ int check_avx_support(void)
 #ifdef __APPLE__
     return 0; // Not needed for Mac implementation
 #else
-    uint32_t eax, ebx, ecx, edx;
-
 #if defined(_MSC_VER)
+    uint32_t ecx;
     int cpu_info[4];
     __cpuid(cpu_info, 1);
     ecx = cpu_info[2];
 #elif defined(__GNUC__)
+    uint32_t eax, ebx, ecx, edx;
     __cpuid(1, eax, ebx, ecx, edx);
-#else
-#error "Unsupported compiler"
 #endif
 
     return ((ecx & (1 << 27)) && (ecx & (1 << 28)));

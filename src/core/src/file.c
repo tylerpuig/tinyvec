@@ -291,3 +291,68 @@ MetadataBytes get_vec_metadata(const MmapInfo *idx_map, const MmapInfo *md_map, 
 
     return result;
 }
+
+bool file_exists(const char *filename)
+{
+    FILE *fp = fopen(filename, "r");
+    bool is_exist = false;
+    if (fp != NULL)
+    {
+        is_exist = true;
+        fclose(fp); // close the file
+    }
+    return is_exist;
+}
+
+bool create_file(const char *filename)
+{
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL)
+        return false;
+    fclose(fp);
+    return true;
+}
+
+FILE *open_db_file(const char *file_path)
+{
+    FILE *db_file;
+
+#ifdef _WIN32
+    // Windows-specific sharing mode
+    // Try to open existing file first
+    if (!file_exists(file_path))
+    {
+
+        if (!create_file(file_path))
+        {
+            printf("Failed to create file: %s\n", file_path);
+            return NULL;
+        }
+    }
+    db_file = _fsopen(file_path, "r+b", _SH_DENYNO);
+#else
+    // Unix-like systems (Linux, macOS, etc.)
+    db_file = fopen(file_path, "r+b");
+    if (!db_file)
+    {
+        FILE *new_db_file = fopen(file_path, "wb");
+        if (new_db_file)
+        {
+            fclose(new_db_file);
+            db_file = fopen(file_path, "r+b");
+            if (!db_file)
+            {
+                printf("Failed to reopen vector file\n");
+                return NULL;
+            }
+        }
+        else
+        {
+            printf("Failed to create vector file\n");
+            return NULL;
+        }
+    }
+#endif
+
+    return db_file;
+}

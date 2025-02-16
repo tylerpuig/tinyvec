@@ -9,10 +9,30 @@
 #endif
 
 #include <stdio.h>
+#include <math.h>
 #include <stdbool.h>
 #include "../include/db.h"
 #include "../include/file.h"
 #include "../include/minheap.h"
+#include "../include/distance.h"
+
+// Platform-specific prefetch
+#if defined(__APPLE__) && defined(TARGET_CPU_ARM64)
+#define PREFETCH(addr) __builtin_prefetch(addr)
+#elif defined(_WIN32)
+#define PREFETCH(addr) _mm_prefetch((char *)(addr), _MM_HINT_T0)
+#else
+#define PREFETCH(addr) __builtin_prefetch(addr)
+#endif
+
+void aligned_free(void *ptr)
+{
+#if defined(_WIN32)
+    _mm_free(ptr);
+#else
+    free(ptr);
+#endif
+}
 
 ActiveTinyVecConnections *active_tinyvec_connections = NULL;
 
@@ -54,24 +74,16 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     if (setvbuf(vec_file, NULL, _IOFBF, 1024 * 1024) != 0)
     {
         printf("Failed to set vector file buffer\n");
-        // free_mmap(idx_mmap);
-        // free_mmap(md_mmap);
         free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
-        // fclose(idx_file);
-        // fclose(md_file);
         return NULL;
     }
 
     TinyVecConnection *connection = malloc(sizeof(TinyVecConnection));
     if (!connection)
     {
-        // free_mmap(idx_mmap);
-        // free_mmap(md_mmap);
         free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
-        // fclose(idx_file);
-        // fclose(md_file);
         return NULL;
     }
 
@@ -110,14 +122,12 @@ TinyVecConnection *get_tinyvec_connection(const char *file_path)
 
     if (!active_tinyvec_connections)
     {
-        printf("No active connections\n");
         return NULL;
     }
 
     for (int i = 0; i < active_tinyvec_connections->active_connections; i++)
     {
 
-        // printf("Comparing %s with %s\n", active_tinyvec_connections->connections[i]->file_path, file_path);
         if (strcmp(active_tinyvec_connections->connections[i]->file_path, file_path) == 0)
         {
             return active_tinyvec_connections->connections[i];
@@ -209,7 +219,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         {
             float *current_vec = vec_buffer + (j * header_info->dimensions);
             PREFETCH((char *)(current_vec + header_info->dimensions));
-            float dot = dot_product_avx_16_optimized(query_vec, current_vec, header_info->dimensions);
+            float dot = dot_product(query_vec, current_vec, header_info->dimensions);
 
             if (dot > min_heap->data[0] || min_heap->size < top_k)
             {
@@ -222,7 +232,6 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     VecResult *sorted = createVecResult(min_heap, top_k);
     if (!sorted)
     {
-        printf("sorted is null\n");
         aligned_free(vec_buffer);
         freeHeap(min_heap);
         free(header_info);
@@ -309,8 +318,6 @@ size_t insert_data(const char *file_path, float **vectors, char **metadatas, siz
         free_metadata_file_paths(md_paths);
         return 0;
     }
-
-    printf("vector_count: %lld, dimensions: %d\n", header_info->vector_count, header_info->dimensions, "from write_vectors_batch");
 
     // After reading dimensions, seek to end for appending
     fseek(vec_file, 0, SEEK_END);
@@ -421,4 +428,39 @@ size_t insert_data(const char *file_path, float **vectors, char **metadatas, siz
     }
 
     return (int)vec_count;
+}
+
+size_t calculate_optimal_buffer_size(int dimensions)
+{
+    // Target memory size we want to work with (let's say ~4MB)
+    const size_t TARGET_BUFFER_MEMORY = 4 * 1024 * 1024; // 4MB
+
+    // Calculate how many vectors would fit in our target memory
+    size_t bytes_per_vector = dimensions * sizeof(float);
+    size_t optimal_vectors = TARGET_BUFFER_MEMORY / bytes_per_vector;
+
+    // Round to nearest power of 2 (optional, but can be more efficient)
+    // or we could round to nearest multiple of 512 or 1024
+
+    // Add some bounds checking
+    if (optimal_vectors < 512)
+        optimal_vectors = 512; // Minimum size
+    if (optimal_vectors > 8192)
+        optimal_vectors = 8192; // Maximum size
+
+    return optimal_vectors;
+}
+
+void *aligned_malloc(size_t size, size_t alignment)
+{
+    void *ptr;
+#if defined(_WIN32)
+    ptr = _mm_malloc(size, alignment);
+#else
+    if (posix_memalign(&ptr, alignment, size) != 0)
+    {
+        return NULL;
+    }
+#endif
+    return ptr;
 }

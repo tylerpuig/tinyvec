@@ -20,6 +20,8 @@ extern "C"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "file.h"
+#include "vec_types.h"
 
     typedef struct TinyVecConnection
     {
@@ -39,12 +41,16 @@ extern "C"
     // Core API functions
     EXPORT TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint32_t dimensions);
     EXPORT IndexFileStats get_index_stats(const char *file_path);
+    EXPORT VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k);
     EXPORT size_t insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                               const size_t vec_count, const uint32_t dimensions);
 
     // Internal functions
     TinyVecConnection *get_tinyvec_connection(const char *file_path);
     bool add_to_connection_pool(TinyVecConnection *connection);
+    void aligned_free(void *ptr);
+    size_t calculate_optimal_buffer_size(int dimensions);
+    void *aligned_malloc(size_t size, size_t alignment);
 #ifdef __cplusplus
 }
 #endif
