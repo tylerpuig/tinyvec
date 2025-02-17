@@ -48,6 +48,7 @@ typedef struct IndexFileStats
 } IndexFileStats;
 
 MmapInfo *create_mmap(const char *filename);
+MmapInfo *create_mmap_with_retry(const char *filename, int max_retries);
 void free_mmap(MmapInfo *info);
 VecFileHeaderInfo *get_vec_file_header_info(FILE *vec_file, const uint32_t dimensions);
 FileMetadataPaths *get_metadata_file_paths(const char *file_path);
@@ -56,5 +57,4 @@ MetadataBytes get_vec_metadata(const MmapInfo *idx_map, const MmapInfo *md_map, 
 FILE *open_db_file(const char *file_path);
 bool file_exists(const char *filename);
 bool create_file(const char *filename);
-
 #endif // FILE_H

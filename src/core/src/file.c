@@ -8,6 +8,15 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+#include <windows.h> // for MAX_PATH
+// TODO:
+#include <psapi.h>
+#else
+#include <limits.h> // for PATH_MAX
+#define MAX_PATH PATH_MAX
+#endif
+
 #include <stdio.h>
 #include "../include/vec_types.h"
 #include "../include/file.h"
@@ -117,6 +126,23 @@ MmapInfo *create_mmap(const char *filename)
 #endif
 
     return info;
+}
+
+MmapInfo *create_mmap_with_retry(const char *filename, int max_retries)
+{
+    for (int i = 0; i < max_retries; i++)
+    {
+        MmapInfo *info = create_mmap(filename);
+        if (info)
+            return info;
+
+#ifdef _WIN32
+        Sleep(50); // Wait 50ms between attempts
+#else
+        usleep(50000);
+#endif
+    }
+    return NULL;
 }
 
 void free_mmap(MmapInfo *info)

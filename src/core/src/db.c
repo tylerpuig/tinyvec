@@ -1,3 +1,5 @@
+// db.c is a new file
+
 #ifdef _WIN32
 #include <windows.h>
 #include <share.h>
@@ -8,13 +10,21 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+#include <io.h>    // for _get_osfhandle
+#include <fcntl.h> // for _fileno
+#endif
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <stdbool.h>
 #include "../include/db.h"
 #include "../include/file.h"
 #include "../include/minheap.h"
 #include "../include/distance.h"
+#include <immintrin.h>
+#include <xmmintrin.h>
 
 // Platform-specific prefetch
 #if defined(__APPLE__) && defined(TARGET_CPU_ARM64)
@@ -46,7 +56,8 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     }
 
     // Open vector file
-    FILE *vec_file = open_db_file(file_path);
+    // FILE *vec_file = open_db_file(file_path);
+    FILE *vec_file = fopen(file_path, "r+b");
     if (!vec_file)
     {
         printf("Failed to open vector file\n");
@@ -194,12 +205,19 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         printf("Failed to get connection\n");
         return NULL;
     }
+
     if (!connection->idx_mmap || !connection->md_mmap)
     {
-        printf("Failed to get mmaps for query\n");
+        printf("Failed to create mmaps for query\n");
         return NULL;
     }
 
+    // FILE *vec_file = fopen(file_path, "r+b");
+    // if (!vec_file)
+    // {
+    //     printf("Failed to open vector file\n");
+    //     return NULL;
+    // }
     VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
     float *vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
@@ -252,8 +270,8 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     return sorted;
 }
 
-size_t insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
-                   const size_t vec_count, const uint32_t dimensions)
+int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
+                const size_t vec_count, const uint32_t dimensions)
 {
 
     if (dimensions == 0)
@@ -404,24 +422,14 @@ size_t insert_data(const char *file_path, float **vectors, char **metadatas, siz
     free(vec_buffer);
     free(idx_buffer);
     free(meta_buffer);
+    // fclose(vec_file);
     fclose(idx_file);
     fclose(meta_file);
 
     if (connection)
     {
 
-        if (connection->idx_mmap)
-        {
-            free_mmap(connection->idx_mmap);
-            connection->idx_mmap = NULL;
-        }
-        if (connection->md_mmap)
-        {
-            free_mmap(connection->md_mmap);
-            connection->md_mmap = NULL;
-        }
-
-        // Create new mmaps
+        printf("creating mmaps after insertion\n");
         connection->idx_mmap = create_mmap(md_paths->idx_path);
         connection->md_mmap = create_mmap(md_paths->md_path);
         connection->vec_file = vec_file;
