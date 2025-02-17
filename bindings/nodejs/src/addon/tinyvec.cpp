@@ -11,7 +11,8 @@ extern "C" VecResult *vector_query(const char *file_path, const float *query_vec
 extern "C" int insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                                    const size_t vec_count, const uint32_t dimensions)
 {
-    return insert_data(file_path, vectors, metadatas, metadata_lengths, vec_count, dimensions);
+    int inserted_vecs = insert_data(file_path, vectors, metadatas, metadata_lengths, vec_count, dimensions);
+    return inserted_vecs;
 }
 
 extern "C" TinyVecConnection *connect_to_db(const char *file_path, const TinyVecConnectionConfig *config)

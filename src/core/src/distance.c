@@ -1,6 +1,8 @@
 #include "../include/distance.h"
 #include <stdbool.h>
 #include <string.h>
+#include <immintrin.h>
+#include <xmmintrin.h>
 
 #if defined(_MSC_VER)
 #include <intrin.h>

@@ -227,13 +227,11 @@ namespace
             napi_throw_error(env, nullptr, "Third argument must be a string.");
             return nullptr;
         }
-        char *file_path = new char[file_path_str_size + 1];
 
-        // Actually copy the string
+        char *file_path = new char[file_path_str_size + 1];
         status = napi_get_value_string_utf8(env, args[2], file_path, file_path_str_size + 1, nullptr);
         if (status != napi_ok)
         {
-            delete[] file_path; // Clean up if we fail
             napi_throw_error(env, nullptr, "Failed to read file path.");
             return nullptr;
         }
