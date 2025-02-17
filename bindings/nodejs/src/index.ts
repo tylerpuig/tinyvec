@@ -6,7 +6,7 @@ import {
   insertVectors as nativeInsert,
   connect as nativeConnect,
   getIndexStats as nativeGetIndexStats,
-} from "./build/Release/tinyvec.node";
+} from "../build/Release/tinyvec.node";
 import fs from "fs/promises";
 
 export type TinyVecConfig = {
@@ -36,10 +36,21 @@ export class TinyVecClient {
       buffer.writeInt32LE(vectorCount, 0);
       buffer.writeInt32LE(dimensions, 4);
 
-      // Write buffer directly instead of empty file first
-      await fs.writeFile(filePath, buffer);
-      await fs.writeFile(filePath + ".idx", "");
-      await fs.writeFile(filePath + ".meta", "");
+      // Open with 'wx' flag - creates a new file and fails if it exists
+      const fileHandle = await fs.open(filePath, "wx");
+      await fileHandle.write(buffer);
+      // Force flush to disk
+      await fileHandle.sync();
+      await fileHandle.close();
+
+      // Create empty metadata files - use 'wx' here too
+      const idxHandle = await fs.open(filePath + ".idx", "wx");
+      const metaHandle = await fs.open(filePath + ".meta", "wx");
+      // Force flush these too
+      await idxHandle.sync();
+      await metaHandle.sync();
+      await idxHandle.close();
+      await metaHandle.close();
     }
     await nativeConnect(filePath, config);
     return new TinyVecClient(filePath, config);

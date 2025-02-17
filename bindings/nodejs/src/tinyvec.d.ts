@@ -10,9 +10,9 @@ declare module "*/tinyvec.node" {
     dimensions: number;
   };
 
-  export type VectorInsertion<TMeta = any> = {
+  export type VectorInsertion = {
     vector: Float32Array;
-    metadata: TMeta;
+    metadata: Record<string, any>;
   };
 
   export function search<TMeta = any>(
