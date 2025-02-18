@@ -636,7 +636,7 @@ namespace
         return promise;
     };
 
-    napi_value UpdateConnectionMmaps(napi_env env, napi_callback_info info)
+    napi_value UpdateDatabaseFileConnection(napi_env env, napi_callback_info info)
     {
         // Get args from JavaScript
         size_t argc = 1;
@@ -673,7 +673,7 @@ namespace
         napi_value result_value;
         try
         {
-            bool update_result = update_connection_mmaps(file_path);
+            bool update_result = update_instance_db_file_connection(file_path);
 
             status = napi_get_boolean(env, update_result, &result_value);
             if (status != napi_ok)
@@ -698,7 +698,7 @@ namespace
     Init(napi_env env, napi_value exports)
     {
         napi_status status;
-        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateMmapsFn;
+        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateDbFileConnectionFn;
 
         // Create search function
         status = napi_create_function(env, nullptr, 0, Search, nullptr, &searchFn);
@@ -717,7 +717,7 @@ namespace
         if (status != napi_ok)
             return nullptr;
 
-        status = napi_create_function(env, nullptr, 0, UpdateConnectionMmaps, nullptr, &updateMmapsFn);
+        status = napi_create_function(env, nullptr, 0, UpdateDatabaseFileConnection, nullptr, &updateDbFileConnectionFn);
         if (status != napi_ok)
             return nullptr;
 
@@ -738,7 +738,7 @@ namespace
         if (status != napi_ok)
             return nullptr;
 
-        status = napi_set_named_property(env, exports, "updateMmaps", updateMmapsFn);
+        status = napi_set_named_property(env, exports, "updateDbFileConnection", updateDbFileConnectionFn);
         if (status != napi_ok)
             return nullptr;
 

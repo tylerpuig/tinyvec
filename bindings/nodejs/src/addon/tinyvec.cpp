@@ -36,7 +36,7 @@ extern "C" IndexFileStats get_index_file_stats_from_db(const char *file_path)
     return stats;
 }
 
-extern "C" bool update_instance_mmaps(const char *file_path)
+extern "C" bool update_instance_db_file_connection(const char *file_path)
 {
-    return update_connection_mmaps(file_path);
+    return update_db_file_connection(file_path);
 }
