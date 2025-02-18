@@ -636,11 +636,69 @@ namespace
         return promise;
     };
 
+    napi_value UpdateConnectionMmaps(napi_env env, napi_callback_info info)
+    {
+        // Get args from JavaScript
+        size_t argc = 1;
+        napi_value args[1];
+        napi_status status;
+        napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+        // Check args
+        if (argc < 1)
+        {
+            napi_throw_error(env, nullptr, "Wrong number of arguments");
+            return nullptr;
+        }
+
+        size_t file_path_str_size;
+        // First get the string size needed
+        status = napi_get_value_string_utf8(env, args[0], nullptr, 0, &file_path_str_size);
+        if (status != napi_ok)
+        {
+            napi_throw_error(env, nullptr, "Failed to get string length");
+            return nullptr;
+        }
+        char *file_path = new char[file_path_str_size + 1];
+
+        // Now actually get the string
+        status = napi_get_value_string_utf8(env, args[0], file_path, file_path_str_size + 1, &file_path_str_size);
+        if (status != napi_ok)
+        {
+            delete[] file_path; // Clean up if we fail
+            napi_throw_error(env, nullptr, "Failed to get string value");
+            return nullptr;
+        }
+
+        napi_value result_value;
+        try
+        {
+            bool update_result = update_connection_mmaps(file_path);
+
+            status = napi_get_boolean(env, update_result, &result_value);
+            if (status != napi_ok)
+            {
+                delete[] file_path;
+                napi_throw_error(env, nullptr, "Failed to create return value");
+                return nullptr;
+            }
+
+            delete[] file_path;
+            return result_value;
+        }
+        catch (...)
+        {
+            delete[] file_path;
+            napi_throw_error(env, nullptr, "Failed to update mmaps");
+            return nullptr;
+        }
+    }
+
     napi_value
     Init(napi_env env, napi_value exports)
     {
         napi_status status;
-        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn;
+        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateMmapsFn;
 
         // Create search function
         status = napi_create_function(env, nullptr, 0, Search, nullptr, &searchFn);
@@ -659,6 +717,10 @@ namespace
         if (status != napi_ok)
             return nullptr;
 
+        status = napi_create_function(env, nullptr, 0, UpdateConnectionMmaps, nullptr, &updateMmapsFn);
+        if (status != napi_ok)
+            return nullptr;
+
         // Add both functions to exports
         status = napi_set_named_property(env, exports, "search", searchFn);
         if (status != napi_ok)
@@ -673,6 +735,10 @@ namespace
             return nullptr;
 
         status = napi_set_named_property(env, exports, "getIndexStats", getIndexStatsFn);
+        if (status != napi_ok)
+            return nullptr;
+
+        status = napi_set_named_property(env, exports, "updateMmaps", updateMmapsFn);
         if (status != napi_ok)
             return nullptr;
 

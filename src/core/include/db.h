@@ -44,6 +44,7 @@ extern "C"
     EXPORT VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k);
     EXPORT int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                            const size_t vec_count, const uint32_t dimensions);
+    EXPORT bool update_connection_mmaps(const char *file_path);
 
     // Internal functions
     TinyVecConnection *get_tinyvec_connection(const char *file_path);

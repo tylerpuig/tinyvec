@@ -18,6 +18,7 @@ extern "C"
     TinyVecConnection *connect_to_db(const char *file_path, const TinyVecConnectionConfig *config);
 
     IndexFileStats get_index_file_stats_from_db(const char *file_path);
+    bool update_instance_mmaps(const char *file_path);
 
 #ifdef __cplusplus
 }
