@@ -1,15 +1,32 @@
 import {
-  type TinyVecSearchResult,
-  type IndexFileStats,
-  type VectorInsertion,
+  // type TinyVecSearchResult,
+  // type IndexFileStats,
+  // type TinyVecInsertion,
   search as nativeSearch,
   insertVectors as nativeInsert,
   connect as nativeConnect,
   getIndexStats as nativeGetIndexStats,
+  updateMmaps as nativeUpdateMmaps,
 } from "../build/Release/tinyvec.node";
 import fs from "fs/promises";
 
 export type TinyVecConfig = {
+  dimensions: number;
+};
+
+export type TinyVecInsertion = {
+  vector: Float32Array;
+  metadata: Record<string, any>;
+};
+
+export type TinyVecSearchResult<TMeta = any> = {
+  index: number;
+  score: number;
+  metadata: TMeta;
+};
+
+export type IndexFileStats = {
+  vectors: number;
   dimensions: number;
 };
 
@@ -67,8 +84,60 @@ export class TinyVecClient {
     return await nativeSearch<TMeta>(query, topK, this.filePath);
   }
 
-  async insert(data: VectorInsertion[]): Promise<number> {
-    return await nativeInsert(this.filePath, data, this.dimensions);
+  async insert(data: TinyVecInsertion[]): Promise<number> {
+    const basePath = this.filePath;
+    const origFiles = {
+      base: basePath,
+      idx: `${basePath}.idx`,
+      meta: `${basePath}.meta`,
+    };
+
+    const tempFiles = {
+      base: `${basePath}.temp`,
+      idx: `${basePath}.idx.temp`,
+      meta: `${basePath}.meta.temp`,
+    };
+
+    let inserted: number = 0;
+
+    try {
+      // Copy original files to temp
+      await Promise.all([
+        fs.copyFile(origFiles.base, tempFiles.base),
+        fs.copyFile(origFiles.idx, tempFiles.idx),
+        fs.copyFile(origFiles.meta, tempFiles.meta),
+      ]);
+
+      // Insert data
+      inserted = await nativeInsert(this.filePath, data, this.dimensions);
+      console.log("inserted", inserted);
+
+      if (inserted <= 0) {
+        return 0;
+      }
+
+      // Atomic rename of temp files to original
+      await Promise.all([
+        fs.rename(tempFiles.base, origFiles.base),
+        fs.rename(tempFiles.idx, origFiles.idx),
+        fs.rename(tempFiles.meta, origFiles.meta),
+      ]);
+
+      // Update mmaps
+      nativeUpdateMmaps(this.filePath);
+
+      return inserted;
+    } catch (error) {
+      console.log(error);
+      throw error;
+    } finally {
+      // Clean up temp files regardless of success or failure
+      await Promise.all([
+        fs.unlink(tempFiles.base).catch(() => {}),
+        fs.unlink(tempFiles.idx).catch(() => {}),
+        fs.unlink(tempFiles.meta).catch(() => {}),
+      ]);
+    }
   }
 
   async getIndexStats() {
@@ -91,4 +160,3 @@ function isFloat32ArrayInstance(arr: any): boolean {
 
 // Default export for easier imports
 export default TinyVecClient;
-export type { TinyVecSearchResult, IndexFileStats };

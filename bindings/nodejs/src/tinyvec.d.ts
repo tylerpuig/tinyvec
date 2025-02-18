@@ -10,7 +10,7 @@ declare module "*/tinyvec.node" {
     dimensions: number;
   };
 
-  export type VectorInsertion = {
+  export type TinyVecInsertion = {
     vector: Float32Array;
     metadata: Record<string, any>;
   };
@@ -23,7 +23,7 @@ declare module "*/tinyvec.node" {
 
   export function insertVectors(
     filePath: string,
-    vectors: VectorInsertion[],
+    vectors: TinyVecInsertion[],
     dimensions: number
   ): Promise<number>;
 
@@ -31,6 +31,8 @@ declare module "*/tinyvec.node" {
     filePath: string,
     config?: TinyVecConfig
   ): Promise<{ filePath: string }>;
+
+  export function updateMmaps(filePath: string): boolean;
 
   export function getIndexStats(filePath: string): Promise<IndexFileStats>;
 }
