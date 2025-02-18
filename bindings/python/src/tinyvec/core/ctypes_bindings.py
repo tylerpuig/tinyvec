@@ -19,10 +19,16 @@ def get_lib_path() -> Path:
 
     # Expected paths - try current directory first, then fall back to build/lib directories
     possible_paths = [
-        # Same directory as this file
+        # Same directory as this file (installed package location)
         this_dir / lib_name,
-        this_dir.parent.parent.parent.parent / "build" / lib_name,  # Build directory
-        this_dir.parent.parent.parent.parent / "lib" / lib_name,    # Lib directory
+
+        # Development paths
+        this_dir.parent.parent.parent.parent / "build" / lib_name,
+        this_dir.parent.parent.parent.parent / "lib" / lib_name,
+
+        # Source directory paths
+        this_dir.parent.parent / "src" / "tinyvec" / "core" / lib_name,
+        this_dir.parent.parent / "tinyvec" / "core" / lib_name,
     ]
 
     for path in possible_paths:

@@ -1,0 +1,3 @@
+include src/tinyvec/core/*.dll
+include src/tinyvec/core/*.so
+include src/tinyvec/core/*.dylib
