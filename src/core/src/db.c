@@ -279,11 +279,25 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
 
+    if (connection)
+    {
+        free_mmap(connection->idx_mmap);
+        free_mmap(connection->md_mmap);
+        fclose(connection->vec_file);
+    }
+
     // open vector file
     // read and write binary, file must exist (r+b)
-    FILE *vec_file = open_db_file(file_path);
+    char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
+    sprintf(temp_vec_file_path, "%s.temp", file_path);
+    if (!temp_vec_file_path)
+    {
+        return 0;
+    }
+    FILE *vec_file = open_db_file(temp_vec_file_path);
     if (!vec_file)
     {
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -292,6 +306,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     {
         printf("Failed to get vector file header info\n");
         fclose(vec_file);
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -299,6 +314,8 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     {
         printf("Dimensions don't match: %d vs %d\n", header_info->dimensions, dimensions);
         fclose(vec_file);
+        free(header_info);
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -306,13 +323,33 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     if (!vec_file || !md_paths)
     {
         if (vec_file)
+        {
             fclose(vec_file);
+        }
+
         free_metadata_file_paths(md_paths);
+        free(temp_vec_file_path);
         free(header_info);
         return 0;
     }
-    FILE *idx_file = fopen(md_paths->idx_path, "ab");
-    FILE *meta_file = fopen(md_paths->md_path, "ab");
+
+    char *temp_idx_path = malloc(strlen(md_paths->idx_path) + 6);
+    char *temp_meta_path = malloc(strlen(md_paths->md_path) + 6);
+    sprintf(temp_idx_path, "%s.temp", md_paths->idx_path);
+    sprintf(temp_meta_path, "%s.temp", md_paths->md_path);
+
+    if (!temp_idx_path || !temp_meta_path)
+    {
+        free(temp_idx_path);
+        free(temp_meta_path);
+        free_metadata_file_paths(md_paths);
+        free(temp_vec_file_path);
+        free(header_info);
+        return 0;
+    }
+
+    FILE *idx_file = fopen(temp_idx_path, "ab");
+    FILE *meta_file = fopen(temp_meta_path, "ab");
 
     if (!vec_file || !idx_file || !meta_file)
     {
@@ -334,6 +371,9 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
         free(header_info);
         free_metadata_file_paths(md_paths);
+        free(temp_idx_path);
+        free(temp_meta_path);
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -364,6 +404,9 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         fclose(vec_file);
         fclose(idx_file);
         fclose(meta_file);
+        free(temp_idx_path);
+        free(temp_meta_path);
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -422,18 +465,12 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     free(vec_buffer);
     free(idx_buffer);
     free(meta_buffer);
-    // fclose(vec_file);
+    fclose(vec_file);
     fclose(idx_file);
     fclose(meta_file);
-
-    if (connection)
-    {
-
-        printf("creating mmaps after insertion\n");
-        connection->idx_mmap = create_mmap(md_paths->idx_path);
-        connection->md_mmap = create_mmap(md_paths->md_path);
-        connection->vec_file = vec_file;
-    }
+    free(temp_idx_path);
+    free(temp_meta_path);
+    free(temp_vec_file_path);
 
     return (int)vec_count;
 }
@@ -471,4 +508,26 @@ void *aligned_malloc(size_t size, size_t alignment)
     }
 #endif
     return ptr;
+}
+
+bool update_connection_mmaps(const char *file_path)
+{
+    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    if (!connection)
+        return false;
+
+    FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
+    if (!md_paths)
+        return false;
+
+    FILE *vec_file = open_db_file(connection->file_path);
+    if (!vec_file)
+    {
+        return false;
+    }
+    connection->vec_file = vec_file;
+
+    connection->idx_mmap = create_mmap(md_paths->idx_path);
+    connection->md_mmap = create_mmap(md_paths->md_path);
+    return true;
 }
