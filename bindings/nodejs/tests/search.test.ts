@@ -1,0 +1,172 @@
+import TinyVecClient, {
+  type TinyVecInsertion,
+  type TinyVecSearchResult,
+} from "../src/index";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
+
+describe("TinyVecClient Search", () => {
+  let tempDir: string;
+  let dbPath: string;
+  let client: TinyVecClient | null;
+  const DIMENSIONS = 128;
+
+  function normalizeVector(vector: Float32Array) {
+    const norm = Math.sqrt(vector.reduce((acc, val) => acc + val * val, 0));
+    const epsilon = 1e-12;
+    for (let i = 0; i < vector.length; i++) {
+      vector[i] = vector[i] / (norm + epsilon);
+    }
+    return vector;
+  }
+
+  // Helper to create a vector with a specific pattern
+  function createVector(baseValue: number): Float32Array {
+    const vector = new Float32Array(DIMENSIONS);
+    for (let i = 0; i < DIMENSIONS; i++) {
+      // Create slightly different values based on baseValue
+      vector[i] = baseValue + i * 0.01;
+    }
+    return normalizeVector(vector);
+  }
+
+  // Helper to prepare test data
+  async function insertTestVectors() {
+    const insertions: TinyVecInsertion[] = Array(10)
+      .fill(null)
+      .map((_, i) => ({
+        vector: createVector(i),
+        metadata: {
+          id: i,
+          text: `document_${i}`,
+          category: i % 2 === 0 ? "even" : "odd",
+        },
+      }));
+
+    await client!.insert(insertions);
+    return insertions;
+  }
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tinyvec-test-"));
+    dbPath = path.join(tempDir, "test.db");
+    client = await TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
+  });
+
+  afterEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  test("should find exact matches", async () => {
+    const insertions = await insertTestVectors();
+
+    // Search using the exact same vector as document_5
+    const searchVector = createVector(5);
+    const results = await client!.search<(typeof insertions)[0]["metadata"]>(
+      searchVector,
+      1
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].metadata.id).toBe(5);
+    expect(results[0].metadata.text).toBe("document_5");
+  });
+
+  test("should return correct number of results with topK", async () => {
+    await insertTestVectors();
+
+    const searchVector = createVector(3);
+    const topK = 5;
+    const results = await client!.search(searchVector, topK);
+
+    expect(results).toHaveLength(topK);
+  });
+
+  test("should return results in order of similarity", async () => {
+    await insertTestVectors();
+
+    const searchVector = createVector(2);
+    const results = await client!.search(searchVector, 3);
+
+    // The closest vectors should be 2, then 1 or 3
+    expect(results[0].metadata.id).toBe(2);
+
+    // Check scores are in descending order (higher is more similar)
+    const scores = results.map((r) => r.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+  });
+
+  test("should handle search with no similar results", async () => {
+    await insertTestVectors();
+
+    // Create a very different vector
+    const searchVector = new Float32Array(DIMENSIONS).fill(999);
+    const results = await client!.search(searchVector, 5);
+
+    // Should still return results, but with lower similarity scores
+    expect(results).toHaveLength(5);
+  });
+
+  test("should throw an error for a query vector with different dimensions", async () => {
+    await insertTestVectors();
+
+    // Create a very different vector
+    const searchVector = new Float32Array(64).fill(0.04);
+
+    await expect(client!.search(searchVector, 5)).rejects.toThrow(
+      "Query vector must have the same dimensions as the database"
+    );
+  });
+
+  test("should preserve metadata types in search results", async () => {
+    const insertions: TinyVecInsertion[] = [
+      {
+        vector: createVector(0),
+        metadata: {
+          id: 1,
+          numeric: 42,
+          string: "test",
+          boolean: true,
+          nested: { key: "value" },
+          array: [1, 2, 3],
+        },
+      },
+    ];
+
+    await client!.insert(insertions);
+
+    const results = await client!.search<(typeof insertions)[0]["metadata"]>(
+      createVector(0),
+      1
+    );
+
+    expect(results[0].metadata).toEqual(insertions[0].metadata);
+    expect(typeof results[0].metadata.numeric).toBe("number");
+    expect(typeof results[0].metadata.string).toBe("string");
+    expect(typeof results[0].metadata.boolean).toBe("boolean");
+    expect(Array.isArray(results[0].metadata.array)).toBe(true);
+  });
+
+  test("should handle multiple searches with different topK", async () => {
+    await insertTestVectors();
+    const searchVector = createVector(5);
+
+    const results1 = await client!.search(searchVector, 3);
+    const results2 = await client!.search(searchVector, 7);
+
+    expect(results1).toHaveLength(3);
+    expect(results2).toHaveLength(7);
+
+    // First 3 results should be identical in both searches
+    expect(results1.map((r) => r.metadata.id)).toEqual(
+      results2.slice(0, 3).map((r) => r.metadata.id)
+    );
+  });
+});

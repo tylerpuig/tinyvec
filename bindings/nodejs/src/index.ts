@@ -80,6 +80,12 @@ export class TinyVecClient {
     if (!isFloat32Array) {
       throw new Error("Query vector must be a Float32Array");
     }
+
+    if (query.length !== this.dimensions) {
+      throw new Error(
+        "Query vector must have the same dimensions as the database"
+      );
+    }
     return await nativeSearch<TMeta>(query, topK, this.filePath);
   }
 
