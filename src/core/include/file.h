@@ -53,7 +53,7 @@ void free_mmap(MmapInfo *info);
 VecFileHeaderInfo *get_vec_file_header_info(FILE *vec_file, const uint32_t dimensions);
 FileMetadataPaths *get_metadata_file_paths(const char *file_path);
 void free_metadata_file_paths(FileMetadataPaths *paths);
-MetadataBytes get_vec_metadata(const MmapInfo *idx_map, const MmapInfo *md_map, const int idx_offset);
+MetadataBytes get_vec_metadata(const int idx_offset, FILE *idx_file, FILE *md_file, long idx_size, long md_size);
 FILE *open_db_file(const char *file_path);
 bool file_exists(const char *filename);
 bool create_file(const char *filename);

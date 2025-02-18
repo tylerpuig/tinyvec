@@ -98,24 +98,15 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
         return NULL;
     }
 
-    MmapInfo *idx_mmap = create_mmap(metadata_paths->idx_path);
-    MmapInfo *md_mmap = create_mmap(metadata_paths->md_path);
-
-    if (idx_mmap)
-    {
-        connection->idx_mmap = idx_mmap;
-    }
-    if (md_mmap)
-    {
-        connection->md_mmap = md_mmap;
-    }
-
     // Make a proper copy of the file path
     size_t path_len = strlen(file_path) + 1;
     char *path_copy = (char *)malloc(path_len);
     if (!path_copy)
     {
         free(connection);
+        fclose(vec_file);
+        free_metadata_file_paths(metadata_paths);
+        free(header_info);
         return NULL;
     }
     strcpy(path_copy, file_path);
@@ -198,40 +189,59 @@ IndexFileStats get_index_stats(const char *file_path)
 
 VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k)
 {
+    TinyVecConnection *connection = NULL;
+    VecFileHeaderInfo *header_info = NULL;
+    float *vec_buffer = NULL;
+    MinHeap *min_heap = NULL;
+    VecResult *sorted = NULL;
+    FileMetadataPaths *md_paths = NULL;
+    FILE *idx_file = NULL;
+    FILE *md_file = NULL;
 
-    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    // Get connection
+    connection = get_tinyvec_connection(file_path);
     if (!connection)
     {
         printf("Failed to get connection\n");
-        return NULL;
+        goto cleanup;
     }
 
-    if (!connection->idx_mmap || !connection->md_mmap)
+    // Get header info
+    header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
+    if (!header_info)
     {
-        printf("Failed to create mmaps for query\n");
-        return NULL;
+        printf("Failed to get header info\n");
+        goto cleanup;
     }
 
-    // FILE *vec_file = fopen(file_path, "r+b");
-    // if (!vec_file)
-    // {
-    //     printf("Failed to open vector file\n");
-    //     return NULL;
-    // }
-    VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
+    // Allocate vector buffer
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
-    float *vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
+    vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
+    if (!vec_buffer)
+    {
+        printf("Failed to allocate vector buffer\n");
+        goto cleanup;
+    }
 
-    MinHeap *min_heap = createMinHeap(top_k);
+    // Create min heap
+    min_heap = createMinHeap(top_k);
+    if (!min_heap)
+    {
+        printf("Failed to create min heap\n");
+        goto cleanup;
+    }
 
+    // Process vectors
     int vec_count = 0;
     for (int i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
     {
         int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
-
         size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
         if (read != vectors_to_read)
-            continue;
+        {
+            printf("Failed to read vectors\n");
+            goto cleanup;
+        }
 
         for (int j = 0; j < vectors_to_read; j++)
         {
@@ -247,27 +257,113 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         }
     }
 
-    VecResult *sorted = createVecResult(min_heap, top_k);
+    // Create sorted results
+    sorted = createVecResult(min_heap, top_k);
     if (!sorted)
     {
-        aligned_free(vec_buffer);
-        freeHeap(min_heap);
-        free(header_info);
-        return NULL;
+        printf("Failed to create sorted results\n");
+        goto cleanup;
     }
 
+    // Get metadata paths
+    md_paths = get_metadata_file_paths(connection->file_path);
+    if (!md_paths)
+    {
+        printf("Failed to get metadata paths\n");
+        goto cleanup;
+    }
+
+    // Open index file
+    idx_file = open_db_file(md_paths->idx_path);
+    if (!idx_file)
+    {
+        printf("Failed to open index file\n");
+        goto cleanup;
+    }
+
+    // Open metadata file
+    md_file = open_db_file(md_paths->md_path);
+    if (!md_file)
+    {
+        printf("Failed to open metadata file\n");
+        goto cleanup;
+    }
+
+    // Get file sizes
+    if (fseek(idx_file, 0, SEEK_END) != 0)
+    {
+        printf("Failed to seek index file\n");
+        goto cleanup;
+    }
+    long idx_size = ftell(idx_file);
+
+    if (fseek(md_file, 0, SEEK_END) != 0)
+    {
+        printf("Failed to seek metadata file\n");
+        goto cleanup;
+    }
+    long md_size = ftell(md_file);
+
+    // Process metadata for each result
     for (int i = 0; i < min_heap->size; i++)
     {
         int offset = sorted[i].index * 12;
-        sorted[i].metadata = get_vec_metadata(connection->idx_mmap, connection->md_mmap, offset);
+        if (fseek(idx_file, 0, SEEK_SET) != 0 || fseek(md_file, 0, SEEK_SET) != 0)
+        {
+            printf("Failed to reset file positions\n");
+            goto cleanup;
+        }
+
+        MetadataBytes metadata = get_vec_metadata(offset, idx_file, md_file, idx_size, md_size);
+        if (!metadata.data)
+        {
+            printf("Failed to get metadata for index %d\n", i);
+            goto cleanup;
+        }
+        sorted[i].metadata = metadata;
     }
 
-    // Clean up
-    aligned_free(vec_buffer);
-    free(header_info);
-    freeHeap(min_heap);
+    if (vec_buffer)
+        aligned_free(vec_buffer);
+    if (idx_file)
+        fclose(idx_file);
+    if (md_file)
+        fclose(md_file);
+    if (header_info)
+        free(header_info);
+    if (min_heap)
+        freeHeap(min_heap);
+    if (md_paths)
+        free(md_paths);
 
     return sorted;
+
+cleanup:
+    if (sorted)
+    {
+        for (int i = 0; i < min_heap->size; i++)
+        {
+            if (sorted[i].metadata.data)
+            {
+                free(sorted[i].metadata.data);
+            }
+        }
+        free(sorted);
+    }
+    if (vec_buffer)
+        aligned_free(vec_buffer);
+    if (idx_file)
+        fclose(idx_file);
+    if (md_file)
+        fclose(md_file);
+    if (header_info)
+        free(header_info);
+    if (min_heap)
+        freeHeap(min_heap);
+    if (md_paths)
+        free(md_paths);
+
+    return NULL;
 }
 
 int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
@@ -278,13 +374,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         return 0;
 
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
-
-    if (connection)
-    {
-        free_mmap(connection->idx_mmap);
-        free_mmap(connection->md_mmap);
-        fclose(connection->vec_file);
-    }
 
     // open vector file
     // read and write binary, file must exist (r+b)
@@ -375,6 +464,12 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         free(temp_meta_path);
         free(temp_vec_file_path);
         return 0;
+    }
+
+    if (connection)
+    {
+
+        fclose(connection->vec_file);
     }
 
     // After reading dimensions, seek to end for appending
@@ -510,24 +605,35 @@ void *aligned_malloc(size_t size, size_t alignment)
     return ptr;
 }
 
-bool update_connection_mmaps(const char *file_path)
+bool update_db_file_connection(const char *file_path)
 {
+    if (!file_path)
+    {
+        printf("Null file path provided\n");
+        return false;
+    }
+
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
     if (!connection)
+    {
+        printf("Failed to get connection for path: %s\n", file_path);
         return false;
+    }
 
-    FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
-    if (!md_paths)
-        return false;
+    // Close any existing open files
+    if (connection->vec_file)
+        fclose(connection->vec_file);
+
+    connection->vec_file = NULL;
 
     FILE *vec_file = open_db_file(connection->file_path);
     if (!vec_file)
     {
+        printf("Failed to open vector file: %s\n", connection->file_path);
         return false;
     }
+
     connection->vec_file = vec_file;
 
-    connection->idx_mmap = create_mmap(md_paths->idx_path);
-    connection->md_mmap = create_mmap(md_paths->md_path);
     return true;
 }

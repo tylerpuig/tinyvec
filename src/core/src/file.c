@@ -151,26 +151,46 @@ void free_mmap(MmapInfo *info)
         return;
 
 #ifdef _WIN32
-    if (info->map)
+    if (info->map != NULL)
     {
-        UnmapViewOfFile(info->map);
+        if (!UnmapViewOfFile(info->map))
+        {
+            // Handle error - GetLastError()
+        }
+        info->map = NULL;
     }
-    if (info->mapping_handle)
+    if (info->mapping_handle != INVALID_HANDLE_VALUE && info->mapping_handle != NULL)
     {
-        CloseHandle(info->mapping_handle);
+        if (!CloseHandle(info->mapping_handle))
+        {
+            // Handle error
+        }
+        info->mapping_handle = NULL;
     }
-    if (info->file_handle)
+    if (info->file_handle != INVALID_HANDLE_VALUE && info->file_handle != NULL)
     {
-        CloseHandle(info->file_handle);
+        if (!CloseHandle(info->file_handle))
+        {
+            // Handle error
+        }
+        info->file_handle = NULL;
     }
 #else
     if (info->map != MAP_FAILED && info->map != NULL)
     {
-        munmap(info->map, info->size);
+        if (munmap(info->map, info->size) == -1)
+        {
+            // Handle error - errno
+        }
+        info->map = NULL;
     }
     if (info->fd != -1)
     {
-        close(info->fd);
+        if (close(info->fd) == -1)
+        {
+            // Handle error
+        }
+        info->fd = -1;
     }
 #endif
     free(info);
@@ -267,57 +287,6 @@ VecFileHeaderInfo *get_vec_file_header_info(FILE *vec_file, const uint32_t dimen
     return header_info;
 }
 
-MetadataBytes get_vec_metadata(const MmapInfo *idx_map, const MmapInfo *md_map, const int idx_offset)
-{
-    MetadataBytes result = {NULL, 0};
-
-    // First validate idx_offset is within bounds
-    if (idx_offset + 12 > idx_map->size)
-    { // Need 12 bytes (8 for offset + 4 for length)
-        printf("Index offset out of bounds: %d > %lu\n", idx_offset + 12, (unsigned long)idx_map->size);
-        return result;
-    }
-
-    const uint64_t *offset_ptr = (uint64_t *)((char *)idx_map->map + idx_offset);
-    const uint32_t *length_ptr = (uint32_t *)((char *)idx_map->map + idx_offset + 8);
-
-    uint64_t offset = *offset_ptr;
-    uint32_t length = *length_ptr;
-
-    // Validate offset and length
-    if (offset >= md_map->size || offset + length > md_map->size)
-    {
-        printf("Invalid metadata offset/length - would exceed file size\n");
-        return result;
-    }
-
-    const unsigned char *md_bytes = (unsigned char *)md_map->map + offset;
-    if (!md_bytes)
-    {
-        printf("Failed to get metadata bytes pointer\n");
-        return result;
-    }
-
-    // Validate length isn't unreasonable
-    if (length > 1024 * 1024)
-    { // For example, cap at 1MB
-        printf("Suspiciously large metadata length: %u\n", length);
-        return result;
-    }
-
-    result.data = (unsigned char *)malloc(length);
-    if (!result.data)
-    {
-        printf("Failed to allocate %u bytes for metadata\n", length);
-        return result;
-    }
-
-    memcpy(result.data, md_bytes, length);
-    result.length = length;
-
-    return result;
-}
-
 bool file_exists(const char *filename)
 {
     FILE *fp = fopen(filename, "r");
@@ -328,6 +297,103 @@ bool file_exists(const char *filename)
         fclose(fp); // close the file
     }
     return is_exist;
+}
+
+MetadataBytes get_vec_metadata(const int idx_offset, FILE *idx_file, FILE *md_file, long idx_size, long md_size)
+{
+    MetadataBytes result = {NULL, 0};
+
+    // First validate idx_offset is within bounds
+    if (idx_offset + 12 > idx_size)
+    {
+        // Need 12 bytes (8 for offset + 4 for length)
+        printf("Index offset out of bounds: %d > %ld\n", idx_offset + 12, idx_size);
+        return result;
+    }
+
+    // Seek to the index offset
+    if (fseek(idx_file, idx_offset, SEEK_SET) != 0)
+    {
+        printf("Failed to seek to index offset\n");
+        return result;
+    }
+
+    // Read offset and length
+    uint64_t offset;
+    uint32_t length;
+
+    if (fread(&offset, sizeof(offset), 1, idx_file) != 1)
+    {
+        printf("Failed to read metadata offset\n");
+        return result;
+    }
+
+    if (fread(&length, sizeof(length), 1, idx_file) != 1)
+    {
+        printf("Failed to read metadata length\n");
+        return result;
+    }
+
+    // Validate offset and length
+    if (offset >= md_size || offset + length > md_size)
+    {
+        printf("Invalid metadata offset/length - would exceed file size\n");
+        return result;
+    }
+
+    // Validate length isn't unreasonable
+    if (length > 1024 * 1024)
+    {
+        // Cap at 1MB
+        printf("Suspiciously large metadata length: %u\n", length);
+        return result;
+    }
+
+    // Allocate buffer for metadata
+    result.data = (unsigned char *)malloc(length);
+    if (!result.data)
+    {
+        printf("Failed to allocate %u bytes for metadata\n", length);
+        return result;
+    }
+
+    // Seek to metadata offset
+    if (fseek(md_file, offset, SEEK_SET) != 0)
+    {
+        printf("Failed to seek to metadata offset\n");
+        free(result.data);
+        result.data = NULL;
+        return result;
+    }
+
+    // Read metadata
+    if (fread(result.data, 1, length, md_file) != length)
+    {
+        printf("Failed to read metadata bytes\n");
+        free(result.data);
+        result.data = NULL;
+        return result;
+    }
+
+    result.length = length;
+    return result;
+}
+
+int reset_file_positions(FILE *idx_file, FILE *md_file, long idx_pos, long md_pos)
+{
+    if (fseek(idx_file, idx_pos, SEEK_SET) != 0)
+    {
+        printf("Failed to reset index file position\n");
+        return 0;
+    }
+
+    if (fseek(md_file, md_pos, SEEK_SET) != 0)
+    {
+        printf("Failed to reset metadata file position\n");
+        return 0;
+    }
+
+    return 1;
 }
 
 bool create_file(const char *filename)
