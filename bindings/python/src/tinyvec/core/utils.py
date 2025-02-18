@@ -20,8 +20,7 @@ def create_db_files(file_path: str, dimensions: int = 0):
     # Pack header data: two 32-bit integers for vector_count and dimensions
     header = struct.pack('<ii', vector_count, dimensions)
 
-    # We use 'x' mode which is equivalent to 'wx' in Node.js
-    # It creates a new file and fails if it exists
+    # Creates a new file and fails if it exists
     try:
         with open(absolute_path, 'xb') as f:
             f.write(header)

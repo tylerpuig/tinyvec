@@ -90,99 +90,105 @@ class TinyVecClient:
             run_query
         )
 
-    def insert(self, vectors: List[TinyVecInsertion]):
-        if len(vectors) == 0:
-            return 0
-
-        dimensions = self.dimensions
-        if dimensions is None:
-            dimensions = len(vectors[0].vector)
-
-        # Pre-filter vectors with correct dimensions
-        valid_vectors = [vec for vec in vectors if len(
-            vec.vector) == dimensions]
-        vec_count = len(valid_vectors)
-
-        if vec_count == 0:
-            return 0
-
-         # Setup paths like in Node.js version
-        base_path = self.file_path
-        orig_files = {
-            'base': base_path,
-            'idx': f"{base_path}.idx",
-            'meta': f"{base_path}.meta"
-        }
-
-        temp_files = {
-            'base': f"{base_path}.temp",
-            'idx': f"{base_path}.idx.temp",
-            'meta': f"{base_path}.meta.temp"
-        }
-
-        try:
-
-            # Copy original files to temp first
-            for orig, temp in zip(orig_files.values(), temp_files.values()):
-                with open(orig, 'rb') as src, open(temp, 'wb') as dst:
-                    dst.write(src.read())
-
-            # Create array of pointers to float arrays
-            vec_array = (ctypes.POINTER(ctypes.c_float) * vec_count)()
-            metadata_array = (ctypes.c_char_p * vec_count)()
-            metadata_lengths = (ctypes.c_size_t * vec_count)()
-
-            # Keep references to prevent garbage collection
-            vector_buffers = []
-
-            # Process everything in one loop
-            for i, vec in enumerate(valid_vectors):
-                # Normalize and convert to float32
-                normalized_vec = (
-                    vec.vector / np.linalg.norm(vec.vector)).astype(np.float32)
-                # Create contiguous buffer and keep reference
-                vec_buffer = normalized_vec.ctypes.data_as(
-                    ctypes.POINTER(ctypes.c_float))
-                # Keep reference to prevent garbage collection
-                vector_buffers.append(normalized_vec)
-                vec_array[i] = vec_buffer
-
-                # Process metadata
-                md_str = json.dumps(
-                    vec.metadata) if vec.metadata is not None else ""
-                md_bytes = md_str.encode('utf-8')
-                metadata_array[i] = md_bytes
-                metadata_lengths[i] = len(md_bytes)
-
-            # Call the C function
-            inserted = lib.insert_data(
-                self.encoded_path,    # file_path
-                vec_array,           # vectors (array of pointers)
-                metadata_array,      # metadatas
-                metadata_lengths,    # metadata_lengths
-                vec_count,          # vec_count
-                dimensions          # dimensions
-            )
-
-            if inserted <= 0:
+    async def insert(self, vectors: List[TinyVecInsertion]):
+        def insert_data():
+            if len(vectors) == 0:
                 return 0
 
-            # Atomic rename of temp files to original
-            for temp, orig in zip(temp_files.values(), orig_files.values()):
-                os.replace(temp, orig)  # os.replace is atomic on Unix systems
+            dimensions = self.dimensions
+            if dimensions is None:
+                dimensions = len(vectors[0].vector)
 
-            # Update DB file connection
-            lib.update_db_file_connection(self.encoded_path)
+            # Pre-filter vectors with correct dimensions
+            valid_vectors = [vec for vec in vectors if len(
+                vec.vector) == dimensions]
+            vec_count = len(valid_vectors)
 
-            return inserted
-        except Exception as e:
-            raise e
-        finally:
-            for temp in temp_files.values():
-                try:
-                    os.unlink(temp)
-                except FileNotFoundError:
-                    pass
+            if vec_count == 0:
+                return 0
+
+            # Setup paths like in Node.js version
+            base_path = self.file_path
+            orig_files = {
+                'base': base_path,
+                'idx': f"{base_path}.idx",
+                'meta': f"{base_path}.meta"
+            }
+
+            temp_files = {
+                'base': f"{base_path}.temp",
+                'idx': f"{base_path}.idx.temp",
+                'meta': f"{base_path}.meta.temp"
+            }
+
+            try:
+
+                # Copy original files to temp first
+                for orig, temp in zip(orig_files.values(), temp_files.values()):
+                    with open(orig, 'rb') as src, open(temp, 'wb') as dst:
+                        dst.write(src.read())
+
+                # Create array of pointers to float arrays
+                vec_array = (ctypes.POINTER(ctypes.c_float) * vec_count)()
+                metadata_array = (ctypes.c_char_p * vec_count)()
+                metadata_lengths = (ctypes.c_size_t * vec_count)()
+
+                # Keep references to prevent garbage collection
+                vector_buffers = []
+
+                # Process everything in one loop
+                for i, vec in enumerate(valid_vectors):
+                    # Normalize and convert to float32
+                    normalized_vec = (
+                        vec.vector / np.linalg.norm(vec.vector)).astype(np.float32)
+                    # Create contiguous buffer and keep reference
+                    vec_buffer = normalized_vec.ctypes.data_as(
+                        ctypes.POINTER(ctypes.c_float))
+                    # Keep reference to prevent garbage collection
+                    vector_buffers.append(normalized_vec)
+                    vec_array[i] = vec_buffer
+
+                    # Process metadata
+                    md_str = json.dumps(
+                        vec.metadata) if vec.metadata is not None else ""
+                    md_bytes = md_str.encode('utf-8')
+                    metadata_array[i] = md_bytes
+                    metadata_lengths[i] = len(md_bytes)
+
+                # Call the C function
+                inserted = lib.insert_data(
+                    self.encoded_path,    # file_path
+                    vec_array,           # vectors (array of pointers)
+                    metadata_array,      # metadatas
+                    metadata_lengths,    # metadata_lengths
+                    vec_count,          # vec_count
+                    dimensions          # dimensions
+                )
+
+                if inserted <= 0:
+                    return 0
+
+                # Atomic rename of temp files to original
+                for temp, orig in zip(temp_files.values(), orig_files.values()):
+                    # os.replace is atomic on Unix systems
+                    os.replace(temp, orig)
+
+                # Update DB file connection
+                lib.update_db_file_connection(self.encoded_path)
+
+                return inserted
+            except Exception as e:
+                raise e
+            finally:
+                for temp in temp_files.values():
+                    try:
+                        os.unlink(temp)
+                    except FileNotFoundError:
+                        pass
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            insert_data
+        )
 
     async def get_index_stats(self) -> TinyVecIndexStats:
         def run_stats():

@@ -17,3 +17,7 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0", "setuptools>=75.8.0", "wheel>=0.45.1"]
 build-backend = "setuptools.build_meta"
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.25.3"
+
