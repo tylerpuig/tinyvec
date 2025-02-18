@@ -409,13 +409,10 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     }
 
     FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
-    if (!vec_file || !md_paths)
+    if (!md_paths)
     {
-        if (vec_file)
-        {
-            fclose(vec_file);
-        }
 
+        fclose(vec_file);
         free_metadata_file_paths(md_paths);
         free(temp_vec_file_path);
         free(header_info);
@@ -440,7 +437,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     FILE *idx_file = fopen(temp_idx_path, "ab");
     FILE *meta_file = fopen(temp_meta_path, "ab");
 
-    if (!vec_file || !idx_file || !meta_file)
+    if (!idx_file || !meta_file)
     {
         if (vec_file)
         {
