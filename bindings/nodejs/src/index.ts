@@ -1,12 +1,9 @@
 import {
-  // type TinyVecSearchResult,
-  // type IndexFileStats,
-  // type TinyVecInsertion,
   search as nativeSearch,
   insertVectors as nativeInsert,
   connect as nativeConnect,
   getIndexStats as nativeGetIndexStats,
-  updateMmaps as nativeUpdateMmaps,
+  updateDbFileConnection as nativeUpdateDbFileConnection,
 } from "../build/Release/tinyvec.node";
 import fs from "fs/promises";
 
@@ -98,8 +95,6 @@ export class TinyVecClient {
       meta: `${basePath}.meta.temp`,
     };
 
-    let inserted: number = 0;
-
     try {
       // Copy original files to temp
       await Promise.all([
@@ -109,8 +104,7 @@ export class TinyVecClient {
       ]);
 
       // Insert data
-      inserted = await nativeInsert(this.filePath, data, this.dimensions);
-      console.log("inserted", inserted);
+      const inserted = await nativeInsert(this.filePath, data, this.dimensions);
 
       if (inserted <= 0) {
         return 0;
@@ -123,8 +117,8 @@ export class TinyVecClient {
         fs.rename(tempFiles.meta, origFiles.meta),
       ]);
 
-      // Update mmaps
-      nativeUpdateMmaps(this.filePath);
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
 
       return inserted;
     } catch (error) {

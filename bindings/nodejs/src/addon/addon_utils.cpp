@@ -158,7 +158,7 @@ AsyncInsertData *prepare_data_for_insertion(napi_env env, napi_callback_info inf
 
         // Get vec property (Float32Array)
         napi_value vec_value;
-        status = napi_get_named_property(env, vector_obj, "vec", &vec_value);
+        status = napi_get_named_property(env, vector_obj, "vector", &vec_value);
         if (status != napi_ok)
             continue;
 

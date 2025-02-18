@@ -32,7 +32,7 @@ declare module "*/tinyvec.node" {
     config?: TinyVecConfig
   ): Promise<{ filePath: string }>;
 
-  export function updateMmaps(filePath: string): boolean;
+  export function updateDbFileConnection(filePath: string): boolean;
 
   export function getIndexStats(filePath: string): Promise<IndexFileStats>;
 }
