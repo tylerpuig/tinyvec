@@ -318,7 +318,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         if (!metadata.data)
         {
             printf("Failed to get metadata for index %d\n", i);
-            goto cleanup;
+            continue;
         }
         sorted[i].metadata = metadata;
     }

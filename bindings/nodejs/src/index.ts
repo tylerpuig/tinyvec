@@ -6,6 +6,7 @@ import {
   updateDbFileConnection as nativeUpdateDbFileConnection,
 } from "../build/Release/tinyvec.node";
 import fs from "fs/promises";
+import path from "path";
 
 export type TinyVecConfig = {
   dimensions: number;
@@ -42,7 +43,8 @@ export class TinyVecClient {
     filePath: string,
     config?: TinyVecConfig
   ): Promise<TinyVecClient> {
-    const file = await fileExists(filePath);
+    const absolutePath = ensureAbsolutePath(filePath);
+    const file = await fileExists(absolutePath);
     if (!file) {
       const vectorCount = 0;
       const dimensions = config?.dimensions ?? 0;
@@ -51,23 +53,23 @@ export class TinyVecClient {
       buffer.writeInt32LE(dimensions, 4);
 
       // Open with 'wx' flag - creates a new file and fails if it exists
-      const fileHandle = await fs.open(filePath, "wx");
+      const fileHandle = await fs.open(absolutePath, "wx");
       await fileHandle.write(buffer);
       // Force flush to disk
       await fileHandle.sync();
       await fileHandle.close();
 
       // Create empty metadata files - use 'wx' here too
-      const idxHandle = await fs.open(filePath + ".idx", "wx");
-      const metaHandle = await fs.open(filePath + ".meta", "wx");
+      const idxHandle = await fs.open(absolutePath + ".idx", "wx");
+      const metaHandle = await fs.open(absolutePath + ".meta", "wx");
       // Force flush these too
       await idxHandle.sync();
       await metaHandle.sync();
       await idxHandle.close();
       await metaHandle.close();
     }
-    await nativeConnect(filePath, config);
-    return new TinyVecClient(filePath, config);
+    await nativeConnect(absolutePath, config);
+    return new TinyVecClient(absolutePath, config);
   }
 
   async search<TMeta = any>(
@@ -122,7 +124,6 @@ export class TinyVecClient {
 
       return inserted;
     } catch (error) {
-      console.log(error);
       throw error;
     } finally {
       // Clean up temp files regardless of success or failure
@@ -152,5 +153,12 @@ function isFloat32ArrayInstance(arr: any): boolean {
   return arr instanceof Float32Array;
 }
 
-// Default export for easier imports
+function ensureAbsolutePath(filePath: string): string {
+  if (!path.isAbsolute(filePath)) {
+    // Convert relative path to absolute using current working directory
+    return path.resolve(process.cwd(), filePath);
+  }
+  return filePath;
+}
+
 export default TinyVecClient;
