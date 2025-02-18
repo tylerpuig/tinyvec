@@ -56,7 +56,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     }
 
     // Open vector file
-    // FILE *vec_file = open_db_file(file_path);
     FILE *vec_file = fopen(file_path, "r+b");
     if (!vec_file)
     {
@@ -375,8 +374,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
 
-    // open vector file
-    // read and write binary, file must exist (r+b)
     char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
     sprintf(temp_vec_file_path, "%s.temp", file_path);
     if (!temp_vec_file_path)
@@ -505,8 +502,8 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     // Get starting metadata offset
     // uint64_t current_meta_offset = ftell(meta_file);
     fseek(meta_file, 0, SEEK_END);
-    uint64_t total_meta_size_offset = ftell(meta_file);
-    uint64_t current_meta_offset = total_meta_size_offset;
+    // uint64_t total_meta_size_offset = ftell(meta_file);
+    uint64_t current_meta_offset = ftell(meta_file);
 
     // Fill buffers
     size_t vec_offset = 0;

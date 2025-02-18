@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h> // Optional for debugging
-#include "vec_types.h"
+#include "../include/vec_types.h"
 
 // MinHeap structure
 typedef struct
