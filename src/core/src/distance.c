@@ -1,6 +1,7 @@
 #include "../include/distance.h"
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
 #if defined(__arm64__) || defined(__aarch64__)
 #include <arm_neon.h>
