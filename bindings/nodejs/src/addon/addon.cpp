@@ -47,7 +47,7 @@ namespace
         napi_async_work work;
     };
 
-    static napi_ref stringify_ref = nullptr;
+    // static napi_ref stringify_ref = nullptr;
 
     // Execute callback (runs in worker thread)
     void ExecuteSearch(napi_env env, void *data)

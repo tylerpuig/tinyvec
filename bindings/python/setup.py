@@ -4,6 +4,8 @@ import subprocess
 import platform
 import os
 
+IS_MACOS = platform.system() == "Darwin"
+
 
 class CustomBuildExt(build_ext):
     def run(self):
@@ -20,38 +22,45 @@ class CustomBuildExt(build_ext):
 
         print("Source paths:", source_paths)
 
+        compiler = 'clang' if IS_MACOS else 'gcc'
+        compile_flags = ['-O3']
+
+        if not IS_MACOS:
+            # Add these flags only for non-macOS systems
+            compile_flags.extend(['-march=native', '-mavx2', '-ffast-math'])
+
         # Compile object files
         for src in source_paths:
             print(f"Compiling {src}")
             subprocess.run([
-                'gcc', '-O3', '-march=native', '-mavx2',
-                '-ffast-math', '-fopenmp', '-c', src
+                compiler, *compile_flags, '-c', src
             ], check=True)
 
         # Build shared library
         if platform.system() == "Windows":
             lib_name = "tinyveclib.dll"
-            link_cmd = ['gcc', '-shared']
+            link_cmd = [compiler, '-shared']
         elif platform.system() == "Darwin":
             lib_name = "tinyveclib.dylib"
-            link_cmd = ['gcc', '-shared', '-dynamiclib']
+            link_cmd = [compiler, '-shared', '-dynamiclib',
+                        '-undefined', 'dynamic_lookup']
         else:
             lib_name = "tinyveclib.so"
-            link_cmd = ['gcc', '-shared']
+            link_cmd = [compiler, '-shared']
 
         obj_files = [f.replace('.c', '.o') for f in sources]
         output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, lib_name)
 
-        # print(f"Building shared library: {output_path}")
+        link_flags = compile_flags
+        if IS_MACOS:
+            link_flags.append('-Wl,-install_name,@rpath/' + lib_name)
+
         subprocess.run([
-            *link_cmd, '-O3', '-march=native', '-mavx2',
-            '-ffast-math', '-fopenmp', *obj_files,
+            *link_cmd, *link_flags, *obj_files,
             '-o', output_path
         ], check=True)
-
-        print(f"Built library at: {output_path}")
 
         # Clean up object files
         for obj in obj_files:
@@ -62,6 +71,12 @@ class CustomBuildExt(build_ext):
                 print(f"Failed to clean up {obj}: {e}")
 
 
+compile_args = ['-O3']
+link_args = []
+
+if not IS_MACOS:
+    compile_args.extend(['-march=native', '-mavx2', '-ffast-math'])
+
 ext_module = Extension(
     "tinyvec.core.tinyveclib",
     sources=[
@@ -71,9 +86,8 @@ ext_module = Extension(
         '../../src/core/src/file.c',
         '../../src/core/src/cJSON.c'
     ],
-    extra_compile_args=['-O3', '-march=native',
-                        '-mavx2', '-ffast-math', '-fopenmp'],
-    extra_link_args=['-fopenmp']
+    extra_compile_args=compile_args,
+    extra_link_args=link_args
 )
 
 setup(

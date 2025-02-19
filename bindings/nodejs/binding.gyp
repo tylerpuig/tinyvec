@@ -3,6 +3,27 @@
         "target_name": "tinyvec",
         "cflags!": ["-fno-exceptions"],
         # "cflags_cc!": [ "-fno-exceptions" ],
+        "conditions": [
+            ['OS=="mac"', {
+                "cflags": [
+                    "-mfpu=neon",
+                    "-O3",
+                    "-mtune=native"
+                ],
+                "cflags_cc": [
+                    "-mfpu=neon",
+                    "-O3",
+                    "-mtune=native",
+                    "-masm=darwin"
+                ],
+                "include_dirs": [
+                    "../../src/core/include",
+                ],
+                "xcode_settings": {
+                    "MACOSX_DEPLOYMENT_TARGET": "10.15"
+                }
+            }]
+        ],
         "cflags": [
             "-mavx",
             "-mavx2",
@@ -32,6 +53,11 @@
                 "ExceptionHandling": 1,
                 "AdditionalOptions": ["/EHsc"]
             }
+        },
+        "xcode_settings": {
+            "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+            "CLANG_CXX_LIBRARY": "libc++",
+            "MACOSX_DEPLOYMENT_TARGET": "10.7"
         },
         "defines": [
             "NAPI_DISABLE_CPP_EXCEPTIONS"
