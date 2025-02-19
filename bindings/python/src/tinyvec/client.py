@@ -49,8 +49,16 @@ class TinyVecClient:
         self.file_path = absolute_path  # Store original string
         self.dimensions = connection.contents.dimensions
 
-    async def query(self, query_vec: np.ndarray, top_k: int) -> List[TinyVecResult]:
+    async def search(self, query_vec: np.ndarray, top_k: int) -> List[TinyVecResult]:
         def run_query():
+            if len(query_vec) == 0:
+                return []
+
+            if len(query_vec) != self.dimensions:
+                raise RuntimeError(
+                    "Query vector must have the same dimensions as the database"
+                )
+
             query_vec_float32 = np.asarray(query_vec, dtype=np.float32)
             # normalize vec
             query_vec_float32 = query_vec_float32 / \
