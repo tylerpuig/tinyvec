@@ -236,3 +236,33 @@ float dot_product(const float *a, float *b, int size)
     }
     return best_dot_product(a, b, size);
 }
+
+void normalize_vector(float *arr, uint32_t length)
+{
+    if (length <= 0 || !arr)
+    {
+        return;
+    }
+
+    // Calculate the sum of squares
+    float sum_squares = 0.0f;
+    for (uint32_t i = 0; i < length; i++)
+    {
+        sum_squares += arr[i] * arr[i];
+    }
+
+    // If the array is all zeros or very close to zero, avoid division by zero
+    if (sum_squares < 1e-10)
+    {
+        return;
+    }
+
+    // Calculate the normalization factor (1/sqrt(sum_squares))
+    float norm_factor = 1.0f / sqrtf(sum_squares);
+
+    // Normalize each element
+    for (uint32_t i = 0; i < length; i++)
+    {
+        arr[i] *= norm_factor;
+    }
+}

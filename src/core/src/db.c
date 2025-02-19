@@ -228,7 +228,9 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
-    for (int i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
+    normalize_vector(query_vec, header_info->dimensions);
+
+    for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
     {
         PREFETCH((char *)&query_vec[i]);
     }
@@ -525,6 +527,11 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     for (size_t i = 0; i < vec_count; i++)
     {
+        if (!vectors[i])
+        {
+            continue;
+        }
+        normalize_vector(vectors[i], header_info->dimensions);
         // Copy vector
         memcpy(vec_buffer + vec_offset,
                vectors[i],
@@ -594,20 +601,6 @@ size_t calculate_optimal_buffer_size(int dimensions)
         optimal_vectors = 8192; // Maximum size
 
     return optimal_vectors;
-}
-
-void *aligned_malloc(size_t size, size_t alignment)
-{
-    void *ptr;
-#if defined(_WIN32)
-    ptr = _mm_malloc(size, alignment);
-#else
-    if (posix_memalign(&ptr, alignment, size) != 0)
-    {
-        return NULL;
-    }
-#endif
-    return ptr;
 }
 
 bool update_db_file_connection(const char *file_path)

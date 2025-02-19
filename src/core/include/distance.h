@@ -9,6 +9,8 @@ int check_avx_support(void);
 // Scalar implementation
 float dot_product_scalar(const float *a, const float *b, int size);
 
+void normalize_vector(float *arr, uint32_t length);
+
 #ifdef __APPLE__
 // vDSP implementation for Mac
 float dot_product_vdsp(const float *a, const float *b, int size);

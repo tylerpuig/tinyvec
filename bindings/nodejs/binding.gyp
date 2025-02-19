@@ -27,12 +27,12 @@
         "cflags": [
             "-mavx",
             "-mavx2",
-            "-O3"
+            "-O3",
         ],
         "cflags_cc": [
             "-mavx",
             "-mavx2",
-            "-O3"
+            "-O3",
         ],
         "sources": [
             "../nodejs/src/addon/addon.cpp",
