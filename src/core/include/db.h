@@ -51,9 +51,7 @@ extern "C"
     // Internal functions
     TinyVecConnection *get_tinyvec_connection(const char *file_path);
     bool add_to_connection_pool(TinyVecConnection *connection);
-    void aligned_free(void *ptr);
     size_t calculate_optimal_buffer_size(int dimensions);
-    void *aligned_malloc(size_t size, size_t alignment);
 #ifdef __cplusplus
 }
 #endif

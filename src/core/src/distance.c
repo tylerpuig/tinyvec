@@ -229,7 +229,7 @@ void init_dot_product(void)
 }
 
 // Wrapper function
-float dot_product(const float *a, float *b, int size)
+float dot_product(const float *a, const float *b, int size)
 {
     if (best_dot_product == NULL)
     {
@@ -266,4 +266,13 @@ void normalize_vector(float *arr, uint32_t length)
     {
         arr[i] *= norm_factor;
     }
+}
+
+float *get_normalized_vector(const float *vec, uint32_t length)
+{
+    float *normalized_vec = (float *)malloc(length * sizeof(float));
+    memcpy(normalized_vec, vec, length * sizeof(float));
+
+    normalize_vector(normalized_vec, length);
+    return normalized_vec;
 }

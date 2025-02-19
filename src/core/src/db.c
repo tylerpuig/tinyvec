@@ -228,11 +228,11 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
-    normalize_vector(query_vec, header_info->dimensions);
+    float *query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
 
     for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
     {
-        PREFETCH((char *)&query_vec[i]);
+        PREFETCH((char *)&query_vec_norm[i]);
     }
 
     // Create min heap
@@ -259,7 +259,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         {
             float *current_vec = vec_buffer + (j * header_info->dimensions);
             PREFETCH((char *)(current_vec + header_info->dimensions));
-            float dot = dot_product(query_vec, current_vec, header_info->dimensions);
+            float dot = dot_product(query_vec_norm, current_vec, header_info->dimensions);
 
             if (dot > min_heap->data[0] || min_heap->size < top_k)
             {
@@ -347,6 +347,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         freeHeap(min_heap);
     if (md_paths)
         free(md_paths);
+    free(query_vec_norm);
 
     return sorted;
 
@@ -362,6 +363,8 @@ cleanup:
         }
         free(sorted);
     }
+
+    free(query_vec_norm);
     if (vec_buffer)
         aligned_free(vec_buffer);
     if (idx_file)
