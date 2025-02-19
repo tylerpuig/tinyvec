@@ -18,6 +18,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/vec_types.h"
 #include "../include/file.h"
 #include <stdbool.h>

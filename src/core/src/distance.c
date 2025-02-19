@@ -1,8 +1,13 @@
 #include "../include/distance.h"
 #include <stdbool.h>
 #include <string.h>
+
+#if defined(__arm64__) || defined(__aarch64__)
+#include <arm_neon.h>
+#else
 #include <immintrin.h>
 #include <xmmintrin.h>
+#endif
 
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -13,8 +18,8 @@
 // CPU feature detection
 int check_avx_support(void)
 {
-#ifdef __APPLE__
-    return 0; // Not needed for Mac implementation
+#if defined(__arm64__) || defined(__aarch64__)
+    return 0; // ARM processor, no AVX
 #else
 #if defined(_MSC_VER)
     uint32_t ecx;
@@ -25,7 +30,6 @@ int check_avx_support(void)
     uint32_t eax, ebx, ecx, edx;
     __cpuid(1, eax, ebx, ecx, edx);
 #endif
-
     return ((ecx & (1 << 27)) && (ecx & (1 << 28)));
 #endif
 }
@@ -45,17 +49,115 @@ float dot_product_scalar(const float *a, const float *b, int size)
 }
 
 #ifdef __APPLE__
-// Mac vDSP implementation
-float dot_product_vdsp(const float *a, const float *b, int size)
+float dot_product_neon(const float *a, const float *b, int size)
+{
+    if (!a || !b || size <= 0)
+        return 0.0f;
+    float32x4_t sum_vec1 = vdupq_n_f32(0);
+    float32x4_t sum_vec2 = vdupq_n_f32(0);
+    float32x4_t sum_vec3 = vdupq_n_f32(0);
+    float32x4_t sum_vec4 = vdupq_n_f32(0);
+
+    int i;
+    for (i = 0; i < size - 15; i += 16)
+    {
+        float32x4_t va1 = vld1q_f32(&a[i]);
+        float32x4_t vb1 = vld1q_f32(&b[i]);
+        float32x4_t va2 = vld1q_f32(&a[i + 4]);
+        float32x4_t vb2 = vld1q_f32(&b[i + 4]);
+        float32x4_t va3 = vld1q_f32(&a[i + 8]);
+        float32x4_t vb3 = vld1q_f32(&b[i + 8]);
+        float32x4_t va4 = vld1q_f32(&a[i + 12]);
+        float32x4_t vb4 = vld1q_f32(&b[i + 12]);
+
+        sum_vec1 = vfmaq_f32(sum_vec1, va1, vb1);
+        sum_vec2 = vfmaq_f32(sum_vec2, va2, vb2);
+        sum_vec3 = vfmaq_f32(sum_vec3, va3, vb3);
+        sum_vec4 = vfmaq_f32(sum_vec4, va4, vb4);
+    }
+
+    for (; i < size - 3; i += 4)
+    {
+        float32x4_t va = vld1q_f32(&a[i]);
+        float32x4_t vb = vld1q_f32(&b[i]);
+        sum_vec1 = vfmaq_f32(sum_vec1, va, vb);
+    }
+
+    float32x4_t sum = vaddq_f32(sum_vec1, sum_vec2);
+    sum = vaddq_f32(sum, sum_vec3);
+    sum = vaddq_f32(sum, sum_vec4);
+
+    float32x2_t sum_half = vadd_f32(vget_low_f32(sum), vget_high_f32(sum));
+    float final_sum = vaddv_f32(sum_half);
+
+    for (; i < size; i++)
+    {
+        final_sum += a[i] * b[i];
+    }
+
+    return final_sum;
+}
+
+float dot_product_neon_wide(const float *a, const float *b, int size)
 {
     if (!a || !b || size <= 0)
         return 0.0f;
 
-    float result;
-    vDSP_dotpr(a, 1, b, 1, &result, size);
-    return result;
+    // Two pairs of 128-bit registers (effectively like one 256-bit register)
+    float32x4_t sum1_low = vdupq_n_f32(0);
+    float32x4_t sum1_high = vdupq_n_f32(0);
+    float32x4_t sum2_low = vdupq_n_f32(0);
+    float32x4_t sum2_high = vdupq_n_f32(0);
+
+    int i;
+    for (i = 0; i < size - 15; i += 16)
+    {
+        // Load 16 elements (like AVX's 256-bit loads)
+        float32x4_t va1_low = vld1q_f32(&a[i]);
+        float32x4_t va1_high = vld1q_f32(&a[i + 4]);
+        float32x4_t va2_low = vld1q_f32(&a[i + 8]);
+        float32x4_t va2_high = vld1q_f32(&a[i + 12]);
+
+        float32x4_t vb1_low = vld1q_f32(&b[i]);
+        float32x4_t vb1_high = vld1q_f32(&b[i + 4]);
+        float32x4_t vb2_low = vld1q_f32(&b[i + 8]);
+        float32x4_t vb2_high = vld1q_f32(&b[i + 12]);
+
+        // Multiply and accumulate (similar to AVX's multiply and add)
+        sum1_low = vfmaq_f32(sum1_low, va1_low, vb1_low);
+        sum1_high = vfmaq_f32(sum1_high, va1_high, vb1_high);
+        sum2_low = vfmaq_f32(sum2_low, va2_low, vb2_low);
+        sum2_high = vfmaq_f32(sum2_high, va2_high, vb2_high);
+    }
+
+    // Handle remaining blocks of 4
+    for (; i < size - 3; i += 4)
+    {
+        float32x4_t va = vld1q_f32(&a[i]);
+        float32x4_t vb = vld1q_f32(&b[i]);
+        sum1_low = vfmaq_f32(sum1_low, va, vb);
+    }
+
+    // Combine all partial sums
+    float32x4_t sum = vaddq_f32(sum1_low, sum1_high);
+    sum = vaddq_f32(sum, sum2_low);
+    sum = vaddq_f32(sum, sum2_high);
+
+    // Reduce to final sum
+    float32x2_t sum_half = vadd_f32(vget_low_f32(sum), vget_high_f32(sum));
+    float final_sum = vaddv_f32(sum_half);
+
+    // Handle remaining elements
+    for (; i < size; i++)
+    {
+        final_sum += a[i] * b[i];
+    }
+
+    return final_sum;
 }
+
 #else
+
 // AVX implementation for x86
 float dot_product_avx_16(const float *a, const float *b, int size)
 {
@@ -109,8 +211,9 @@ void init_dot_product(void)
 {
     if (best_dot_product == NULL)
     {
-#ifdef __APPLE__
-        best_dot_product = dot_product_vdsp;
+#if defined(__arm64__) || defined(__aarch64__)
+        // best_dot_product = dot_product_neon;
+        best_dot_product = dot_product_neon_wide;
 #else
         if (check_avx_support())
         {

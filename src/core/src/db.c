@@ -1,8 +1,9 @@
-// db.c is a new file
-
+// Platform-specific includes
 #ifdef _WIN32
 #include <windows.h>
 #include <share.h>
+#include <io.h>    // for _get_osfhandle
+#include <fcntl.h> // for _fileno
 #else
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -10,39 +11,44 @@
 #include <unistd.h>
 #endif
 
-#ifdef _WIN32
-#include <io.h>    // for _get_osfhandle
-#include <fcntl.h> // for _fileno
-#endif
-
+// Standard includes
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdbool.h>
+#include <string.h>
+
+// Project includes
 #include "../include/db.h"
 #include "../include/file.h"
 #include "../include/minheap.h"
 #include "../include/distance.h"
+
+// Architecture-specific SIMD includes
+#if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #include <xmmintrin.h>
+#elif defined(__APPLE__) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
-// Platform-specific prefetch
-#if defined(__APPLE__) && defined(TARGET_CPU_ARM64)
+// Platform-specific prefetch macros
+#if defined(__APPLE__) && defined(__aarch64__)
 #define PREFETCH(addr) __builtin_prefetch(addr)
-#elif defined(_WIN32)
+#elif defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
 #define PREFETCH(addr) _mm_prefetch((char *)(addr), _MM_HINT_T0)
 #else
 #define PREFETCH(addr) __builtin_prefetch(addr)
 #endif
 
-void aligned_free(void *ptr)
-{
-#if defined(_WIN32)
-    _mm_free(ptr);
+// Platform-specific aligned memory functions
+#ifdef _WIN32
+#define aligned_malloc(size, alignment) _aligned_malloc(size, alignment)
+#define aligned_free(ptr) _aligned_free(ptr)
 #else
-    free(ptr);
+#define aligned_malloc(size, alignment) aligned_alloc(alignment, size)
+#define aligned_free(ptr) free(ptr)
 #endif
-}
 
 ActiveTinyVecConnections *active_tinyvec_connections = NULL;
 
@@ -222,6 +228,11 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
+    for (int i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
+    {
+        PREFETCH((char *)&query_vec[i]);
+    }
+
     // Create min heap
     min_heap = createMinHeap(top_k);
     if (!min_heap)
@@ -232,7 +243,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
     // Process vectors
     int vec_count = 0;
-    for (int i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
+    for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
     {
         int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
         size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
@@ -316,7 +327,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         MetadataBytes metadata = get_vec_metadata(offset, idx_file, md_file, idx_size, md_size);
         if (!metadata.data)
         {
-            printf("Failed to get metadata for index %d\n", i);
+            // printf("Failed to get metadata for index %d\n", i);
             continue;
         }
         sorted[i].metadata = metadata;
