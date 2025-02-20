@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
 #if defined(__arm64__) || defined(__aarch64__)
 #include <arm_neon.h>
