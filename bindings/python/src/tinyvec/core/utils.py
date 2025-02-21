@@ -1,5 +1,8 @@
 import os
 import struct
+import numpy as np
+import numpy.typing as npt
+from ..types import VectorInput
 
 
 def ensure_absolute_path(file_path: str) -> str:
@@ -48,3 +51,39 @@ def create_db_files(file_path: str, dimensions: int = 0):
 def file_exists(file_path: str) -> bool:
     """Check if a file exists at the given path."""
     return os.path.exists(file_path)
+
+
+def get_float32_array(query_vec: VectorInput) -> np.ndarray:
+    """Convert input vector to float32 numpy array.
+
+    Args:
+        query_vec: Input vector (numpy array, list, or sequence of numbers)
+
+    Returns:
+        numpy float32 array
+
+    Raises:
+        ValueError: If input is empty or None
+    """
+    # Check for None
+    if query_vec is None:
+        raise ValueError("Vector cannot be None")
+
+    # For sequences (lists, tuples), check length
+    if isinstance(query_vec, (list, tuple)) and len(query_vec) == 0:
+        raise ValueError("Vector cannot be empty")
+
+    # For numpy arrays, check size
+    if isinstance(query_vec, np.ndarray) and query_vec.size == 0:
+        raise ValueError("Vector cannot be empty")
+
+    query_vec_float32: npt.NDArray[np.float32]
+    if isinstance(query_vec, np.ndarray):
+        if query_vec.dtype != np.float32:
+            query_vec_float32 = query_vec.astype(np.float32)
+        else:
+            query_vec_float32 = query_vec
+    else:
+        query_vec_float32 = np.asarray(query_vec, dtype=np.float32)
+
+    return query_vec_float32

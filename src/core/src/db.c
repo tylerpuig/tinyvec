@@ -147,7 +147,7 @@ TinyVecConnection *get_tinyvec_connection(const char *file_path)
 bool add_to_connection_pool(TinyVecConnection *connection)
 {
     // Initialize if NULL
-    if (active_tinyvec_connections == NULL)
+    if (!active_tinyvec_connections)
     {
         active_tinyvec_connections = malloc(sizeof(ActiveTinyVecConnections));
         if (!active_tinyvec_connections)

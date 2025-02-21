@@ -1,12 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-import numpy as np
 from typing import List
 import json
 import ctypes
 import os
 from typing import List, cast
-from .core.utils import create_db_files, file_exists, ensure_absolute_path
+from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array
+from .types import VectorInput
 
 
 from .core.ctypes_bindings import lib, VecResult, MetadataBytes
@@ -49,26 +49,25 @@ class TinyVecClient:
         self.file_path = absolute_path  # Store original string
         self.dimensions = connection.contents.dimensions
 
-    async def search(self, query_vec: np.ndarray, top_k: int) -> List[TinyVecResult]:
+    def disconnect(self):
+        result = lib.remove_from_connection_pool(self.encoded_path)
+        print('disconect result: ', result)
+
+    async def search(self, query_vec: VectorInput, top_k: int) -> List[TinyVecResult]:
         def run_query():
-            if len(query_vec) == 0:
-                return []
 
-            if len(query_vec) != self.dimensions:
-                raise RuntimeError(
-                    "Query vector must have the same dimensions as the database"
-                )
-
-            query_vec_float32 = np.asarray(query_vec, dtype=np.float32)
-            # normalize vec
-            query_vec_float32 = query_vec_float32 / \
-                np.linalg.norm(query_vec_float32)
+            query_vec_float32 = get_float32_array(query_vec)
 
             results_ptr = lib.get_top_k(
-                self.encoded_path,  # Use the stored encoded path
+                self.encoded_path,
                 query_vec_float32,
                 top_k
             )
+
+            if query_vec_float32.shape[0] != self.dimensions:
+                raise RuntimeError(
+                    f"Query vector must have {self.dimensions} dimensions, got {query_vec_float32.shape[0]}"
+                )
 
             results: List[TinyVecResult] = []
             for i in range(top_k):
@@ -108,14 +107,13 @@ class TinyVecClient:
                 dimensions = len(vectors[0].vector)
 
             # Pre-filter vectors with correct dimensions
-            valid_vectors = [vec for vec in vectors if len(
-                vec.vector) == dimensions]
-            vec_count = len(valid_vectors)
+            # valid_vectors = [vec for vec in vectors if len(
+            #     vec.vector) == dimensions]
+            # vec_count = len(valid_vectors)
 
-            if vec_count == 0:
-                return 0
+            # if vec_count == 0:
+            #     return 0
 
-            # Setup paths like in Node.js version
             base_path = self.file_path
             orig_files = {
                 'base': base_path,
@@ -128,9 +126,21 @@ class TinyVecClient:
                 'idx': f"{base_path}.idx.temp",
                 'meta': f"{base_path}.meta.temp"
             }
+            # Pre-process vectors to get valid count
+            valid_vectors = []
+            for vec in vectors:
+                try:
+                    vec_float32 = get_float32_array(vec.vector)
+                    if len(vec_float32) != dimensions:
+                        continue
+                    valid_vectors.append((vec, vec_float32))
+                except (ValueError, TypeError) as e:
+                    continue
 
+            vec_count = len(valid_vectors)
+            if vec_count == 0:
+                return 0
             try:
-
                 # Copy original files to temp first
                 for orig, temp in zip(orig_files.values(), temp_files.values()):
                     with open(orig, 'rb') as src, open(temp, 'wb') as dst:
@@ -143,17 +153,12 @@ class TinyVecClient:
 
                 # Keep references to prevent garbage collection
                 vector_buffers = []
-
-                # Process everything in one loop
-                for i, vec in enumerate(valid_vectors):
-                    # Normalize and convert to float32
-                    normalized_vec = (
-                        vec.vector / np.linalg.norm(vec.vector)).astype(np.float32)
+                for i, (vec, vec_float32) in enumerate(valid_vectors):
                     # Create contiguous buffer and keep reference
-                    vec_buffer = normalized_vec.ctypes.data_as(
+                    vec_buffer = vec_float32.ctypes.data_as(
                         ctypes.POINTER(ctypes.c_float))
                     # Keep reference to prevent garbage collection
-                    vector_buffers.append(normalized_vec)
+                    vector_buffers.append(vec_float32)
                     vec_array[i] = vec_buffer
 
                     # Process metadata
@@ -193,6 +198,16 @@ class TinyVecClient:
                         os.unlink(temp)
                     except FileNotFoundError:
                         pass
+
+                # Clear ctypes arrays
+                if 'vec_array' in locals():
+                    for ptr in vec_array:
+                        if ptr:
+                            del ptr
+                if 'metadata_array' in locals():
+                    for ptr in metadata_array:
+                        if ptr:
+                            del ptr
         return await asyncio.get_event_loop().run_in_executor(
             self.executor,
             insert_data

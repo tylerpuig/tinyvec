@@ -5,6 +5,7 @@ import tempfile
 import numpy as np
 from typing import Dict, Any, List
 from dataclasses import dataclass
+import random
 
 pytest_plugins = ['pytest_asyncio']
 
@@ -12,6 +13,11 @@ pytest_plugins = ['pytest_asyncio']
 def generate_random_vector(dimensions: int) -> np.ndarray:
     """Generate a random vector with given dimensions."""
     return np.random.rand(dimensions).astype(np.float32)
+
+
+def generate_random_vector_list(dimensions: int) -> List[float]:
+    """Generate a random vector with given dimensions."""
+    return [random.random() for _ in range(dimensions)]
 
 
 @pytest.fixture(scope="function")
@@ -151,3 +157,21 @@ async def test_insert_invalid_dimensions(client):
 
     stats = await client.get_index_stats()
     assert stats.vector_count == 0  # Nothing should be inserted
+
+
+@pytest.mark.asyncio
+async def test_insert_list(client):
+    """Should handle a non numpy array list."""
+    insertions = [
+        TinyVecInsertion(
+            vector=generate_random_vector_list(128),
+            metadata={"id": 1}
+        )
+    ]
+
+    # Should return 0 for invalid insertions
+    inserted = await client.insert(insertions)
+    assert inserted == 1
+
+    stats = await client.get_index_stats()
+    assert stats.vector_count == 1

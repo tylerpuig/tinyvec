@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import numpy as np
+from .types import VectorInput
 
 
 @dataclass
@@ -17,7 +17,7 @@ class TinyVecResult:
 
 @dataclass
 class TinyVecInsertion:
-    vector: np.ndarray
+    vector: VectorInput
     metadata: dict | None
 
 

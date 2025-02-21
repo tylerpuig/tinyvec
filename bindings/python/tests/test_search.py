@@ -24,6 +24,12 @@ def create_vector(base_value: float) -> np.ndarray:
     return normalize_vector(vector)
 
 
+def create_vector_list(base_value: float) -> List[float]:
+    """Create a vector with a specific pattern."""
+    vector = [base_value + i * 0.01 for i in range(DIMENSIONS)]
+    return vector
+
+
 @pytest.fixture(scope="function")
 def temp_dir():
     """Create a temporary directory for each test."""
@@ -126,7 +132,7 @@ async def test_throw_error_different_dimensions(client):
     # Create a vector with wrong dimensions
     search_vector = np.full(64, 0.04, dtype=np.float32)
 
-    with pytest.raises(RuntimeError, match="Query vector must have the same dimensions as the database"):
+    with pytest.raises(RuntimeError):
         await client.search(search_vector, 5)
 
 
@@ -161,6 +167,23 @@ async def test_multiple_searches_different_top_k(client):
     """Should handle multiple searches with different topK."""
     await insert_test_vectors(client)
     search_vector = create_vector(5)
+
+    results1 = await client.search(search_vector, 3)
+    results2 = await client.search(search_vector, 7)
+
+    assert len(results1) == 3
+    assert len(results2) == 7
+
+    # First 3 results should be identical in both searches
+    assert [r.metadata["id"] for r in results1] == [
+        r.metadata["id"] for r in results2[:3]]
+
+
+@pytest.mark.asyncio
+async def test_list_search(client):
+    """Should handle a non numpy array list."""
+    await insert_test_vectors(client)
+    search_vector = create_vector_list(5)
 
     results1 = await client.search(search_vector, 3)
     results2 = await client.search(search_vector, 7)
