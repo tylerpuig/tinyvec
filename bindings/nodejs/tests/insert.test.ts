@@ -1,25 +1,24 @@
 import TinyVecClient, { type TinyVecInsertion } from "../src/index";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
+import { generateRandomVector } from "./utils";
 
 describe("TinyVecClient Insert", () => {
   let tempDir: string;
   let dbPath: string;
   let client: TinyVecClient | null;
 
-  function generateRandomVector(dimensions: number) {
-    const vector = new Float32Array(dimensions);
-    for (let i = 0; i < dimensions; i++) {
-      vector[i] = Math.random();
-    }
-    return vector;
-  }
-
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tinyvec-test-"));
+    // Create main temp directory if it doesn't exist
+    await fs.mkdir("temp").catch(() => {});
+
+    // Create a temporary directory for each test inside 'temp'
+    tempDir = path.join("temp", `test-${Date.now()}`);
+    await fs.mkdir(tempDir);
+
     dbPath = path.join(tempDir, "test.db");
-    client = await TinyVecClient.connect(dbPath, { dimensions: 128 });
+    client = null;
+    client = TinyVecClient.connect(dbPath, { dimensions: 128 });
   });
 
   afterEach(async () => {

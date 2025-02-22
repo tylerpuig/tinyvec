@@ -1,10 +1,6 @@
-import TinyVecClient, {
-  type TinyVecInsertion,
-  type TinyVecSearchResult,
-} from "../src/index";
+import TinyVecClient, { type TinyVecInsertion } from "../src/index";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
 describe("TinyVecClient Search", () => {
   let tempDir: string;
@@ -49,9 +45,15 @@ describe("TinyVecClient Search", () => {
   }
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tinyvec-test-"));
+    // Create main temp directory if it doesn't exist
+    await fs.mkdir("temp").catch(() => {});
+
+    // Create a temporary directory for each test inside 'temp'
+    tempDir = path.join("temp", `test-${Date.now()}`);
+    await fs.mkdir(tempDir);
+
     dbPath = path.join(tempDir, "test.db");
-    client = await TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
+    client = TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
   });
 
   afterEach(async () => {

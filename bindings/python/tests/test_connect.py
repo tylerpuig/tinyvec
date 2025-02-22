@@ -1,4 +1,4 @@
-from tinyvec import TinyVecClient, TinyVecConfig
+from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
 import pytest
 import os
 import tempfile
@@ -6,7 +6,7 @@ import asyncio
 import struct
 import numpy as np
 from pathlib import Path
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 
 pytest_plugins = ['pytest_asyncio']
 
@@ -70,6 +70,34 @@ async def test_initialize_header_with_correct_values(client, db_path):
     header = read_initial_header(db_path)
     assert header["vector_count"] == 0
     assert header["dimensions"] == 128
+
+
+@pytest.mark.asyncio
+async def test_initialize_header_with_correct_values_no_dimensions(client, db_path):
+    """Should initialize header & index stats with correct values when no dimensions have been specified initially."""
+    # config = TinyVecConfig(dimensions=0)
+    client.connect(db_path)
+
+    # Expect to be able to read header even though file is in use
+    header = read_initial_header(db_path)
+    assert header["vector_count"] == 0
+    assert header["dimensions"] == 0
+
+    index_stats = await client.get_index_stats()
+    assert index_stats.vector_count == 0
+    assert index_stats.dimensions == 0
+
+    to_insert: List[TinyVecInsertion] = [
+        TinyVecInsertion(vector=np.random.rand(
+            128).astype(np.float32), metadata={"id": 1})
+    ]
+
+    inserted = await client.insert(to_insert)
+    assert inserted == 1
+
+    index_stats = await client.get_index_stats()
+    assert index_stats.vector_count == 1
+    assert index_stats.dimensions == 128
 
 
 @pytest.mark.asyncio

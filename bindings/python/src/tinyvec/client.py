@@ -18,6 +18,9 @@ from .models import (
 )
 
 
+base_tinyvec_config = TinyVecConfig(dimensions=0)
+
+
 class TinyVecClient:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -25,7 +28,7 @@ class TinyVecClient:
         self.encoded_path: bytes | None = None
         self.dimensions: int | None = None
 
-    def connect(self, file_path: str, config: TinyVecConfig):
+    def connect(self, file_path: str, config: TinyVecConfig = base_tinyvec_config):
         absolute_path = ensure_absolute_path(file_path)
 
         if not file_exists(absolute_path):
@@ -98,21 +101,14 @@ class TinyVecClient:
         )
 
     async def insert(self, vectors: List[TinyVecInsertion]):
+
         def insert_data():
             if len(vectors) == 0:
                 return 0
 
             dimensions = self.dimensions
-            if dimensions is None:
+            if dimensions == 0:
                 dimensions = len(vectors[0].vector)
-
-            # Pre-filter vectors with correct dimensions
-            # valid_vectors = [vec for vec in vectors if len(
-            #     vec.vector) == dimensions]
-            # vec_count = len(valid_vectors)
-
-            # if vec_count == 0:
-            #     return 0
 
             base_path = self.file_path
             orig_files = {
@@ -131,7 +127,7 @@ class TinyVecClient:
             for vec in vectors:
                 try:
                     vec_float32 = get_float32_array(vec.vector)
-                    if len(vec_float32) != dimensions:
+                    if len(vec_float32) != dimensions and dimensions != 0:
                         continue
                     valid_vectors.append((vec, vec_float32))
                 except (ValueError, TypeError) as e:
