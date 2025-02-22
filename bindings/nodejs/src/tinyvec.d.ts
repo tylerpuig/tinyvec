@@ -19,7 +19,7 @@ declare module "*/tinyvec.node" {
     query: Float32Array,
     topK: number,
     filePath: string
-  ): Promise<Array<TinyVecSearchResult<TMeta>>>;
+  ): Promise<TinyVecSearchResult<TMeta>[]>;
 
   export function insertVectors(
     filePath: string,
