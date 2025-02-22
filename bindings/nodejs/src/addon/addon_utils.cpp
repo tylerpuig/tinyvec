@@ -232,7 +232,7 @@ ConnectionData *prepare_data_for_connection(napi_env env, napi_callback_info inf
     ConnectionData *connection_data = new ConnectionData;
 
     // Get arguments
-    size_t argc = 2; // Maximum number of arguments we'll accept
+    size_t argc = 2;
     napi_value args[2];
     status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     if (status != napi_ok)
@@ -242,7 +242,7 @@ ConnectionData *prepare_data_for_connection(napi_env env, napi_callback_info inf
     if (argc < 1)
     {
         napi_throw_error(env, nullptr, "Wrong number of arguments. Expected file path.");
-        delete connection_data; // Don't forget to clean up
+        delete connection_data;
         return nullptr;
     }
 
@@ -286,7 +286,7 @@ ConnectionData *prepare_data_for_connection(napi_env env, napi_callback_info inf
                 if (status == napi_ok)
                 {
                     napi_get_value_int32(env, config_dimensions_napi_value, &config_dimensions_value);
-                    // Note: If this fails, we'll just keep the default value of 0
+                    // If this fails, we'll just keep the default value of 0
                 }
             }
         }

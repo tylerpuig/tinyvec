@@ -30,7 +30,7 @@ declare module "*/tinyvec.node" {
   export function connect(
     filePath: string,
     config?: TinyVecConfig
-  ): Promise<{ filePath: string }>;
+  ): { filePath: string };
 
   export function updateDbFileConnection(filePath: string): boolean;
 

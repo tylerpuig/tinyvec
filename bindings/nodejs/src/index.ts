@@ -5,7 +5,8 @@ import {
   getIndexStats as nativeGetIndexStats,
   updateDbFileConnection as nativeUpdateDbFileConnection,
 } from "../build/Release/tinyvec.node";
-import fs from "fs/promises";
+import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import path from "path";
 
 export type TinyVecConfig = {
@@ -39,13 +40,10 @@ export class TinyVecClient {
     }
   }
 
-  static async connect(
-    filePath: string,
-    config?: TinyVecConfig
-  ): Promise<TinyVecClient> {
+  static connect(filePath: string, config?: TinyVecConfig): TinyVecClient {
     const absolutePath = ensureAbsolutePath(filePath);
-    const file = await fileExists(absolutePath);
-    if (!file) {
+    const fExists = fileExists(absolutePath);
+    if (!fExists) {
       const vectorCount = 0;
       const dimensions = config?.dimensions ?? 0;
       const buffer = Buffer.alloc(8);
@@ -53,22 +51,22 @@ export class TinyVecClient {
       buffer.writeInt32LE(dimensions, 4);
 
       // Open with 'wx' flag - creates a new file and fails if it exists
-      const fileHandle = await fs.open(absolutePath, "wx");
-      await fileHandle.write(buffer);
+      const fd = fs.openSync(absolutePath, "wx");
+      fs.writeSync(fd, buffer);
       // Force flush to disk
-      await fileHandle.sync();
-      await fileHandle.close();
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
 
-      // Create empty metadata files - use 'wx' here too
-      const idxHandle = await fs.open(absolutePath + ".idx", "wx");
-      const metaHandle = await fs.open(absolutePath + ".meta", "wx");
-      // Force flush these too
-      await idxHandle.sync();
-      await metaHandle.sync();
-      await idxHandle.close();
-      await metaHandle.close();
+      // Create empty metadata files
+      const idxFd = fs.openSync(absolutePath + ".idx", "wx");
+      const metaFd = fs.openSync(absolutePath + ".meta", "wx");
+      // Force flush these
+      fs.fsyncSync(idxFd);
+      fs.fsyncSync(metaFd);
+      fs.closeSync(idxFd);
+      fs.closeSync(metaFd);
     }
-    await nativeConnect(absolutePath, config);
+    nativeConnect(absolutePath, config);
     return new TinyVecClient(absolutePath, config);
   }
 
@@ -90,6 +88,7 @@ export class TinyVecClient {
   }
 
   async insert(data: TinyVecInsertion[]): Promise<number> {
+    if (!data || !data.length) return 0;
     const basePath = this.filePath;
     const origFiles = {
       base: basePath,
@@ -106,9 +105,9 @@ export class TinyVecClient {
     try {
       // Copy original files to temp
       await Promise.all([
-        fs.copyFile(origFiles.base, tempFiles.base),
-        fs.copyFile(origFiles.idx, tempFiles.idx),
-        fs.copyFile(origFiles.meta, tempFiles.meta),
+        fsPromises.copyFile(origFiles.base, tempFiles.base),
+        fsPromises.copyFile(origFiles.idx, tempFiles.idx),
+        fsPromises.copyFile(origFiles.meta, tempFiles.meta),
       ]);
 
       // Insert data
@@ -120,9 +119,9 @@ export class TinyVecClient {
 
       // Atomic rename of temp files to original
       await Promise.all([
-        fs.rename(tempFiles.base, origFiles.base),
-        fs.rename(tempFiles.idx, origFiles.idx),
-        fs.rename(tempFiles.meta, origFiles.meta),
+        fsPromises.rename(tempFiles.base, origFiles.base),
+        fsPromises.rename(tempFiles.idx, origFiles.idx),
+        fsPromises.rename(tempFiles.meta, origFiles.meta),
       ]);
 
       // Update DB file connection
@@ -134,9 +133,9 @@ export class TinyVecClient {
     } finally {
       // Clean up temp files regardless of success or failure
       await Promise.all([
-        fs.unlink(tempFiles.base).catch(() => {}),
-        fs.unlink(tempFiles.idx).catch(() => {}),
-        fs.unlink(tempFiles.meta).catch(() => {}),
+        fsPromises.unlink(tempFiles.base).catch(() => {}),
+        fsPromises.unlink(tempFiles.idx).catch(() => {}),
+        fsPromises.unlink(tempFiles.meta).catch(() => {}),
       ]);
     }
   }
@@ -146,13 +145,8 @@ export class TinyVecClient {
   }
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch (err) {
-    return false;
-  }
+function fileExists(filePath: string): boolean {
+  return fs.existsSync(filePath);
 }
 
 function isFloat32ArrayInstance(arr: any): boolean {

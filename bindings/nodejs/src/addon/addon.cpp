@@ -428,7 +428,6 @@ namespace
 
         // Set the path property
         napi_value napi_config_file_path;
-        // status = napi_create_string_utf8(env, promise_data->file_path, NAPI_AUTO_LENGTH, &napi_config_file_path);
         status = napi_create_string_utf8(env, promise_data->file_path.c_str(), NAPI_AUTO_LENGTH, &napi_config_file_path);
         status = napi_set_named_property(env, return_object, "filePath", napi_config_file_path);
 
@@ -487,30 +486,14 @@ namespace
         // Create and set dimensions
         napi_value napi_dimensions;
         status = napi_create_uint32(env, dimensions, &napi_dimensions);
-        // if (status != napi_ok)
-        // {
-        //     std::cout << "Failed to create dimensions value" << std::endl;
-        // }
 
         status = napi_set_named_property(env, return_object, "dimensions", napi_dimensions);
-        // if (status != napi_ok)
-        // {
-        //     std::cout << "Failed to set dimensions property" << std::endl;
-        // }
 
         // Create and set vector count
         napi_value napi_vector_count;
         status = napi_create_uint32(env, vector_count, &napi_vector_count);
-        // if (status != napi_ok)
-        // {
-        //     std::cout << "Failed to create vector count value" << std::endl;
-        // }
 
         status = napi_set_named_property(env, return_object, "vectors", napi_vector_count);
-        // if (status != napi_ok)
-        // {
-        //     std::cout << "Failed to set vector count property" << std::endl;
-        // }
 
         delete[] promise_data->file_path;
 
@@ -585,6 +568,72 @@ namespace
         // Return the promise
         return promise;
     };
+    napi_value ConnectSync(napi_env env, napi_callback_info info)
+    {
+        ConnectionData *connection_data = prepare_data_for_connection(env, info);
+        if (!connection_data)
+        {
+            return nullptr;
+        }
+
+        TinyVecConnectionConfig tinyvec_config;
+        tinyvec_config.dimensions = connection_data->dimensions;
+        napi_status status;
+
+        try
+        {
+            TinyVecConnection *connection_config = connect_to_db(connection_data->file_path, &tinyvec_config);
+            if (!connection_config)
+            {
+                napi_throw_error(env, nullptr, "Failed to connect to database");
+                delete connection_data;
+                return nullptr;
+            }
+
+            // Create the return object
+            napi_value return_object;
+            status = napi_create_object(env, &return_object);
+            if (status != napi_ok)
+            {
+                napi_throw_error(env, nullptr, "Failed to create return object");
+                delete connection_data;
+                return nullptr;
+            }
+
+            napi_value napi_config_file_path;
+            status = napi_create_string_utf8(env, connection_config->file_path, NAPI_AUTO_LENGTH, &napi_config_file_path);
+            if (status != napi_ok)
+            {
+                napi_throw_error(env, nullptr, "Failed to create file path string");
+                delete connection_data;
+                return nullptr;
+            }
+
+            status = napi_set_named_property(env, return_object, "filePath", napi_config_file_path);
+            if (status != napi_ok)
+            {
+                napi_throw_error(env, nullptr, "Failed to set file path property");
+                delete connection_data;
+                return nullptr;
+            }
+
+            // Clean up and return
+            delete connection_data;
+            return return_object;
+        }
+        catch (const std::exception &e)
+        {
+            napi_throw_error(env, nullptr, e.what());
+            delete connection_data;
+            return nullptr;
+        }
+        catch (...)
+        {
+            napi_throw_error(env, nullptr, "Unknown error occurred during connection");
+            delete connection_data;
+            return nullptr;
+        }
+    }
     napi_value GetIndexStats(napi_env env, napi_callback_info info)
     {
 
@@ -747,4 +796,4 @@ namespace
 
     NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
 
-} // namespace
+}
