@@ -271,14 +271,7 @@ VecFileHeaderInfo *get_vec_file_header_info(FILE *vec_file, const uint32_t dimen
     if (!header_info)
         return NULL;
 
-    if (dimensions == 0)
-    {
-        header_info->dimensions = read_dimensions;
-    }
-    else
-    {
-        header_info->dimensions = dimensions;
-    }
+    header_info->dimensions = read_dimensions;
     header_info->vector_count = total_vectors;
 
     // Reset file position to end of header

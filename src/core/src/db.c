@@ -186,7 +186,7 @@ IndexFileStats get_index_stats(const char *file_path)
     if (!header_info)
         return (IndexFileStats){0, 0};
 
-    IndexFileStats stats = (IndexFileStats){header_info->vector_count, connection->dimensions};
+    IndexFileStats stats = (IndexFileStats){header_info->vector_count, header_info->dimensions};
 
     free(header_info);
     return stats;
@@ -211,7 +211,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
-    // Get header info
+    // Get header info, also resets the file position
     header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     if (!header_info)
     {
@@ -385,9 +385,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
                 const size_t vec_count, const uint32_t dimensions)
 {
 
-    if (dimensions == 0)
-        return 0;
-
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
 
     char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
@@ -412,13 +409,10 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         return 0;
     }
 
-    if (header_info->dimensions != dimensions)
+    bool reset_dimensions = false;
+    if (header_info->dimensions == 0 && header_info->dimensions != dimensions)
     {
-        printf("Dimensions don't match: %d vs %d\n", header_info->dimensions, dimensions);
-        fclose(vec_file);
-        free(header_info);
-        free(temp_vec_file_path);
-        return 0;
+        reset_dimensions = true;
     }
 
     FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
@@ -569,6 +563,11 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     // Write the new vector count
     fwrite(&new_count, sizeof(int), 1, vec_file);
+
+    if (reset_dimensions)
+    {
+        fwrite(&dimensions, sizeof(uint32_t), 1, vec_file);
+    }
 
     // Cleanup
     free(header_info);
