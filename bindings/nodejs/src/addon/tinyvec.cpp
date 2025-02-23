@@ -32,8 +32,7 @@ extern "C" TinyVecConnection *connect_to_db(const char *file_path, const TinyVec
 extern "C" IndexFileStats get_index_file_stats_from_db(const char *file_path)
 {
 
-    IndexFileStats stats = get_index_stats(file_path);
-    return stats;
+    return get_index_stats(file_path);
 }
 
 extern "C" bool update_instance_db_file_connection(const char *file_path)

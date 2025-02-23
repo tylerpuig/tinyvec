@@ -758,7 +758,7 @@ namespace
         if (status != napi_ok)
             return nullptr;
 
-        status = napi_create_function(env, nullptr, 0, Connect, nullptr, &connectFn);
+        status = napi_create_function(env, nullptr, 0, ConnectSync, nullptr, &connectFn);
         if (status != napi_ok)
             return nullptr;
 

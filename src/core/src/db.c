@@ -114,6 +114,7 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
         free(header_info);
         return NULL;
     }
+
     strcpy(path_copy, file_path);
     connection->file_path = path_copy;
     connection->dimensions = header_info->dimensions;
@@ -180,11 +181,17 @@ IndexFileStats get_index_stats(const char *file_path)
 
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
     if (!connection)
+    {
+        printf("Failed to get TinyVec connection\n");
         return (IndexFileStats){0, 0};
+    }
 
     VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     if (!header_info)
+    {
+        printf("Failed to get file header info\n");
         return (IndexFileStats){0, 0};
+    }
 
     IndexFileStats stats = (IndexFileStats){header_info->vector_count, header_info->dimensions};
 
@@ -251,8 +258,8 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
         if (read != vectors_to_read)
         {
-            printf("Failed to read vectors\n");
-            goto cleanup;
+
+            continue;
         }
 
         for (int j = 0; j < vectors_to_read; j++)

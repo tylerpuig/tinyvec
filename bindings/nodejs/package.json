@@ -1,26 +1,35 @@
 {
-  "name": "nodejs",
+  "name": "tinyvec",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
-  "directories": {
-    "example": "examples",
-    "test": "jest"
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=16"
   },
+  "files": [
+    "src",
+    "dist",
+    "binding.gyp"
+  ],
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "build": "tsc -p tsconfig.build.json",
+    "install": "node-gyp rebuild",
+    "prepare": "npm run build"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "tylerpuig",
+  "license": "MIT",
   "devDependencies": {
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.13.4",
+    "@types/node": "^22.13.5",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "node-addon-api": "^8.3.0"
-  }
+    "node-addon-api": "^8.3.0",
+    "node-gyp": "^11.1.0"
+  },
+  "gypfile": true
 }
