@@ -1,9 +1,7 @@
 from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
 import pytest
-import os
-import tempfile
 import numpy as np
-from typing import Dict, Any, List
+from typing import List
 from dataclasses import dataclass
 import random
 
@@ -18,19 +16,6 @@ def generate_random_vector(dimensions: int) -> np.ndarray:
 def generate_random_vector_list(dimensions: int) -> List[float]:
     """Generate a random vector with given dimensions."""
     return [random.random() for _ in range(dimensions)]
-
-
-@pytest.fixture(scope="function")
-def temp_dir():
-    """Create a temporary directory for each test."""
-    temp_dir = tempfile.mkdtemp(prefix="tinyvec-test-")
-    yield temp_dir
-
-
-@pytest.fixture
-def db_path(temp_dir):
-    """Get the database path within the temporary directory."""
-    return os.path.join(temp_dir, "test.db")
 
 
 @pytest.fixture

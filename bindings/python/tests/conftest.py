@@ -1,9 +1,7 @@
-# import pytest
-# import os
-# import shutil
-# import tempfile
-# import time
+import pytest
 from pathlib import Path
+import shutil
+import time
 
 
 def pytest_configure(config):
@@ -12,27 +10,33 @@ def pytest_configure(config):
     )
 
 
-# def pytest_sessionfinish(session, exitstatus):
-#     """Clean up any remaining test files after all tests are done."""
-#     temp_dir = tempfile.gettempdir()
+@pytest.fixture(scope="session", autouse=True)
+def base_temp_dir():
+    """Create the main temp directory at the start of all tests."""
+    temp_dir = Path("temp")
+    temp_dir.mkdir(exist_ok=True)
+    yield temp_dir
+    try:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    except Exception:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
-#     # Wait a bit to ensure all file handles are released
-#     time.sleep(1)
 
-#     # Find and remove all tinyvec test directories
-#     for item in Path(temp_dir).glob("tinyvec-test-*"):
-#         try:
-#             if item.is_dir():
-#                 shutil.rmtree(item, ignore_errors=True)
-#         except Exception as e:
-#             print(f"Warning: Failed to remove test directory {item}: {e}")
+@pytest.fixture(scope="function")
+def temp_dir(base_temp_dir):
+    """Create a temporary directory for each test inside 'temp'."""
+    test_dir = Path(base_temp_dir) / f"test-{int(time.time() * 1000)}"
+    test_dir.mkdir()
+    yield test_dir
+    try:
+        shutil.rmtree(test_dir, ignore_errors=True)
+    except Exception:
+        shutil.rmtree(test_dir, ignore_errors=True)
 
-#     # Also clean up any test.db files in current directory
-#     try:
-#         for ext in ["", ".idx", ".meta"]:
-#             test_file = Path("./test.db" + ext)
-#             if test_file.exists():
-#                 test_file.unlink()
-#     except Exception as e:
-#         print(
-#             f"Warning: Failed to remove test files in current directory: {e}")
+
+@pytest.fixture
+def db_path(temp_dir):
+    """Get the database path within the temporary directory."""
+    # await the temp_dir since it's an async fixture
+    test_dir = temp_dir
+    return str(test_dir / "test.db")

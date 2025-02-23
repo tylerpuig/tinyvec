@@ -1,28 +1,12 @@
 from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
 import pytest
 import os
-import tempfile
-import asyncio
 import struct
 import numpy as np
 from pathlib import Path
 from typing import Tuple, Dict, Any, List
 
 pytest_plugins = ['pytest_asyncio']
-
-
-@pytest.fixture(scope="function")
-def temp_dir():
-    """Create a temporary directory for each test."""
-    temp_dir = tempfile.mkdtemp(prefix="tinyvec-test-")
-    yield temp_dir
-    # We don't try to cleanup since files will be in use
-
-
-@pytest.fixture
-def db_path(temp_dir):
-    """Get the database path within the temporary directory."""
-    return os.path.join(temp_dir, "test.db")
 
 
 @pytest.fixture
