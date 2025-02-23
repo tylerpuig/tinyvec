@@ -55,3 +55,4 @@ Thumbs.db
 /docs/api/_build/
 
 /bindings/nodejs/temp/
+*.db

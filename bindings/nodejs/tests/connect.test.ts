@@ -84,6 +84,10 @@ describe("TinyVecClient Connect", () => {
   test("should create new database files when they don't exist", async () => {
     client = TinyVecClient.connect(dbPath, { dimensions: 128 });
 
+    const indexStats = await client.getIndexStats();
+    expect(indexStats.vectors).toBe(0);
+    expect(indexStats.dimensions).toBe(128);
+
     const [idxExists, metaExists] = await checkFilesExist(dbPath);
 
     expect(idxExists).toBe(true);
@@ -97,6 +101,10 @@ describe("TinyVecClient Connect", () => {
     const header = await readInitialHeader(dbPath);
     expect(header.vectorCount).toBe(0);
     expect(header.dimensions).toBe(128);
+
+    const indexStats = await client.getIndexStats();
+    expect(indexStats.vectors).toBe(0);
+    expect(indexStats.dimensions).toBe(128);
   });
 
   test("should handle missing dimensions in config", async () => {
@@ -109,6 +117,10 @@ describe("TinyVecClient Connect", () => {
 
   test("should handle missing dimensions in config and update header file dimensions on first insert", async () => {
     client = TinyVecClient.connect(dbPath);
+
+    const indexStats = await client.getIndexStats();
+    expect(indexStats.vectors).toBe(0);
+    expect(indexStats.dimensions).toBe(0);
 
     const header = await readInitialHeader(dbPath);
     expect(header.vectorCount).toBe(0);
