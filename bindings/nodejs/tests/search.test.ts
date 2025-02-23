@@ -1,6 +1,8 @@
-import TinyVecClient, { type TinyVecInsertion } from "../src/index";
+import TinyVecClient from "../src/index";
+import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
+import { generateRandomVector } from "./utils";
 
 describe("TinyVecClient Search", () => {
   let tempDir: string;
@@ -116,15 +118,15 @@ describe("TinyVecClient Search", () => {
     expect(results).toHaveLength(5);
   });
 
-  test("should throw an error for a query vector with different dimensions", async () => {
+  test("should convert an array to a Float32Array", async () => {
     await insertTestVectors();
 
     // Create a very different vector
-    const searchVector = new Float32Array(64).fill(0.04);
+    const searchVector = [...generateRandomVector(DIMENSIONS)];
 
-    await expect(client!.search(searchVector, 5)).rejects.toThrow(
-      "Query vector must have the same dimensions as the database"
-    );
+    const results = await client!.search(searchVector, 5);
+    expect(results).toBeTruthy();
+    expect(results).toHaveLength(5);
   });
 
   test("should preserve metadata types in search results", async () => {

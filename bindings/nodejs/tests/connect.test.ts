@@ -1,4 +1,5 @@
-import TinyVecClient, { type TinyVecInsertion } from "../src/index";
+import TinyVecClient from "../src/index";
+import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
 import { generateRandomVector } from "./utils";

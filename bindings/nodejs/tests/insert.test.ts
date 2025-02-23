@@ -1,4 +1,5 @@
-import TinyVecClient, { type TinyVecInsertion } from "../src/index";
+import TinyVecClient from "../src/index";
+import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
 import { generateRandomVector } from "./utils";
@@ -76,6 +77,29 @@ describe("TinyVecClient Insert", () => {
       },
       {
         vector: generateRandomVector(128),
+        metadata: { id: 3, type: "audio", duration: 120 },
+      },
+    ];
+
+    const inserted = await client!.insert(insertions);
+    expect(inserted).toBe(3);
+
+    const stats = await client!.getIndexStats();
+    expect(stats.vectors).toBe(3);
+  });
+
+  test("should convert number arrays to Float32 arrays", async () => {
+    const insertions: TinyVecInsertion[] = [
+      {
+        vector: [...generateRandomVector(128)],
+        metadata: { id: 1, type: "text", content: "hello" },
+      },
+      {
+        vector: [...generateRandomVector(128)],
+        metadata: { id: 2, type: "image", size: "large" },
+      },
+      {
+        vector: [...generateRandomVector(128)],
         metadata: { id: 3, type: "audio", duration: 120 },
       },
     ];
