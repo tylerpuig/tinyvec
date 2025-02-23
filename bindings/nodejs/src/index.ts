@@ -5,44 +5,28 @@ import {
   getIndexStats as nativeGetIndexStats,
   updateDbFileConnection as nativeUpdateDbFileConnection,
 } from "../build/Release/tinyvec.node";
+import * as tinyvecUtils from "./utils";
+import * as tinyvecTypes from "./types";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
-import path from "path";
-
-export type TinyVecConfig = {
-  dimensions: number;
-};
-
-export type TinyVecInsertion = {
-  vector: Float32Array;
-  metadata: Record<string, any>;
-};
-
-export type TinyVecSearchResult<TMeta = any> = {
-  index: number;
-  score: number;
-  metadata: TMeta;
-};
-
-export type IndexFileStats = {
-  vectors: number;
-  dimensions: number;
-};
 
 export class TinyVecClient {
   private filePath: string;
   private dimensions: number = 0;
 
-  private constructor(filePath: string, config?: TinyVecConfig) {
+  private constructor(filePath: string, config?: tinyvecTypes.TinyVecConfig) {
     this.filePath = filePath;
     if (config?.dimensions) {
       this.dimensions = config.dimensions;
     }
   }
 
-  static connect(filePath: string, config?: TinyVecConfig): TinyVecClient {
-    const absolutePath = ensureAbsolutePath(filePath);
-    const fExists = fileExists(absolutePath);
+  static connect(
+    filePath: string,
+    config?: tinyvecTypes.TinyVecConfig
+  ): TinyVecClient {
+    const absolutePath = tinyvecUtils.ensureAbsolutePath(filePath);
+    const fExists = tinyvecUtils.fileExists(absolutePath);
     if (!fExists) {
       const vectorCount = 0;
       const dimensions = config?.dimensions ?? 0;
@@ -71,23 +55,14 @@ export class TinyVecClient {
   }
 
   async search<TMeta = any>(
-    query: Float32Array,
+    query: tinyvecTypes.NumericArray,
     topK: number
-  ): Promise<TinyVecSearchResult<TMeta>[]> {
-    const isFloat32Array = isFloat32ArrayInstance(query);
-    if (!isFloat32Array) {
-      throw new Error("Query vector must be a Float32Array");
-    }
-
-    if (query.length !== this.dimensions) {
-      throw new Error(
-        "Query vector must have the same dimensions as the database"
-      );
-    }
-    return await nativeSearch<TMeta>(query, topK, this.filePath);
+  ): Promise<tinyvecTypes.TinyVecSearchResult<TMeta>[]> {
+    const float32Array = tinyvecUtils.convertToFloat32Array(query);
+    return await nativeSearch<TMeta>(float32Array, topK, this.filePath);
   }
 
-  async insert(data: TinyVecInsertion[]): Promise<number> {
+  async insert(data: tinyvecTypes.TinyVecInsertion[]): Promise<number> {
     if (!data || !data.length) return 0;
     const basePath = this.filePath;
     const origFiles = {
@@ -103,6 +78,29 @@ export class TinyVecClient {
     };
 
     try {
+      // Convert data with index and metadata context
+      const convertedData = data.map((item, index) => {
+        try {
+          return {
+            ...item,
+            vector: tinyvecUtils.convertToFloat32Array(
+              item.vector,
+              index,
+              item.metadata
+            ),
+          };
+        } catch (error) {
+          if (error instanceof tinyvecUtils.VectorConversionError) {
+            throw error;
+          }
+          throw new tinyvecUtils.VectorConversionError(
+            `Failed to convert vector at index ${index}`,
+            index,
+            item.metadata
+          );
+        }
+      });
+
       // Copy original files to temp
       await Promise.all([
         fsPromises.copyFile(origFiles.base, tempFiles.base),
@@ -111,13 +109,17 @@ export class TinyVecClient {
       ]);
 
       // Insert data
-      const inserted = await nativeInsert(this.filePath, data, this.dimensions);
+      const inserted = await nativeInsert(
+        this.filePath,
+        convertedData,
+        this.dimensions
+      );
 
       if (inserted <= 0) {
         return 0;
       }
 
-      // Atomic rename of temp files to original
+      // "Atomic" rename of temp files to original
       await Promise.all([
         fsPromises.rename(tempFiles.base, origFiles.base),
         fsPromises.rename(tempFiles.idx, origFiles.idx),
@@ -143,22 +145,6 @@ export class TinyVecClient {
   async getIndexStats() {
     return await nativeGetIndexStats(this.filePath);
   }
-}
-
-function fileExists(filePath: string): boolean {
-  return fs.existsSync(filePath);
-}
-
-function isFloat32ArrayInstance(arr: any): boolean {
-  return arr instanceof Float32Array;
-}
-
-function ensureAbsolutePath(filePath: string): string {
-  if (!path.isAbsolute(filePath)) {
-    // Convert relative path to absolute using current working directory
-    return path.resolve(process.cwd(), filePath);
-  }
-  return filePath;
 }
 
 export default TinyVecClient;

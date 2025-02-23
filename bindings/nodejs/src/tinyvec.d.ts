@@ -1,19 +1,10 @@
 declare module "*/tinyvec.node" {
-  export type TinyVecSearchResult<TMeta = any> = {
-    index: number;
-    score: number;
-    metadata: TMeta;
-  };
-
-  export type IndexFileStats = {
-    vectors: number;
-    dimensions: number;
-  };
-
-  export type TinyVecInsertion = {
-    vector: Float32Array;
-    metadata: Record<string, any>;
-  };
+  import type {
+    TinyVecSearchResult,
+    IndexFileStats,
+    TinyVecConfig,
+    TinyVecInsertion,
+  } from "./types";
 
   export function search<TMeta = any>(
     query: Float32Array,
