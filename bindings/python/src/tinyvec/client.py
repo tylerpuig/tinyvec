@@ -4,6 +4,7 @@ from typing import List
 import json
 import ctypes
 import os
+import struct
 from typing import List, cast
 from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array
 from .types import VectorInput
@@ -31,8 +32,10 @@ class TinyVecClient:
     def connect(self, file_path: str, config: TinyVecConfig = base_tinyvec_config):
         absolute_path = ensure_absolute_path(file_path)
 
+        dimensions = config.dimensions or 0
+
         if not file_exists(absolute_path):
-            create_db_files(absolute_path, config.dimensions)
+            create_db_files(absolute_path, dimensions)
 
         # Store the encoded path we use for connection
         try:
@@ -41,7 +44,6 @@ class TinyVecClient:
             raise RuntimeError(
                 f"Failed to encode path: {absolute_path}") from e
 
-        # initialize_vector_file(file_path, config)
         connection = lib.create_tiny_vec_connection(
             self.encoded_path, config.dimensions)
 
@@ -52,13 +54,8 @@ class TinyVecClient:
         self.file_path = absolute_path  # Store original string
         self.dimensions = connection.contents.dimensions
 
-    def disconnect(self):
-        result = lib.remove_from_connection_pool(self.encoded_path)
-        print('disconect result: ', result)
-
     async def search(self, query_vec: VectorInput, top_k: int) -> List[TinyVecResult]:
         def run_query():
-
             query_vec_float32 = get_float32_array(query_vec)
 
             results_ptr = lib.get_top_k(
@@ -67,10 +64,9 @@ class TinyVecClient:
                 top_k
             )
 
-            if query_vec_float32.shape[0] != self.dimensions:
-                raise RuntimeError(
-                    f"Query vector must have {self.dimensions} dimensions, got {query_vec_float32.shape[0]}"
-                )
+            # Check if results_ptr is NULL
+            if not results_ptr:
+                return []
 
             results: List[TinyVecResult] = []
             for i in range(top_k):
@@ -122,6 +118,37 @@ class TinyVecClient:
                 'idx': f"{base_path}.idx.temp",
                 'meta': f"{base_path}.meta.temp"
             }
+
+            if not self.file_path:
+                raise ValueError("File path is not set")
+
+            with open(self.file_path, 'rb') as f:
+                # Skip first 4 bytes (vector count)
+                f.seek(4)
+                current_dimensions = struct.unpack('<i', f.read(4))[0]
+
+            # If dimensions are 0, update them
+            if current_dimensions == 0:
+                # Determine dimensions from either provided parameter or first vector
+                if dimensions is not None:
+                    new_dimensions = dimensions
+                elif vectors and len(vectors) > 0:
+                    new_dimensions = len(vectors[0].vector)
+                else:
+                    raise ValueError(
+                        "Cannot determine dimensions - no data or dimensions provided")
+
+                # Create buffer with new dimensions
+                dimensions_buffer = struct.pack('<i', new_dimensions)
+                self.dimensions = new_dimensions
+
+                # Open file in read+write mode and update dimensions at offset 4
+                with open(self.file_path, 'r+b') as f:
+                    f.seek(4)  # Position to write dimensions
+                    f.write(dimensions_buffer)
+                    f.flush()
+                    os.fsync(f.fileno())  # Force flush to disk
+
             # Pre-process vectors to get valid count
             valid_vectors = []
             for vec in vectors:

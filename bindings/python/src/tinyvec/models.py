@@ -23,4 +23,4 @@ class TinyVecInsertion:
 
 @dataclass
 class TinyVecConfig:
-    dimensions: int
+    dimensions: int | None = None
