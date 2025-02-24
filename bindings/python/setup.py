@@ -18,7 +18,7 @@ class CustomBuildExt(build_ext):
 
         sources = ['db.c', 'minheap.c', 'distance.c', 'file.c', 'cJSON.c']
         source_paths = [os.path.join(
-            setup_dir, '../../src/core/src', src) for src in sources]
+            setup_dir, 'src', 'core', 'src', src) for src in sources]
 
         print("Source paths:", source_paths)
 
@@ -80,11 +80,11 @@ if not IS_MACOS:
 ext_module = Extension(
     "tinyvec.core.tinyveclib",
     sources=[
-        '../../src/core/src/db.c',
-        '../../src/core/src/minheap.c',
-        '../../src/core/src/distance.c',
-        '../../src/core/src/file.c',
-        '../../src/core/src/cJSON.c'
+        'src/core/src/db.c',
+        'src/core/src/minheap.c',
+        'src/core/src/distance.c',
+        'src/core/src/file.c',
+        'src/core/src/cJSON.c'
     ],
     extra_compile_args=compile_args,
     extra_link_args=link_args

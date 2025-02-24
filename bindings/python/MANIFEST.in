@@ -1,3 +1,5 @@
-include src/tinyvec/core/*.dll
-include src/tinyvec/core/*.so
-include src/tinyvec/core/*.dylib
+include README.md
+include LICENSE
+recursive-include src/tinyvec *.py *.dll *.so *.dylib
+recursive-include src/core/src *.c *.h
+recursive-include src/core/include *.h
