@@ -226,8 +226,10 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
-    if (header_info->dimensions == 0)
+    if (header_info->dimensions == 0 || header_info->vector_count == 0)
+    {
         return sorted;
+    }
 
     // Allocate vector buffer
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
