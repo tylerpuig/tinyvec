@@ -143,4 +143,14 @@ describe("TinyVecClient Insert", () => {
     expect(stats.vectors).toBe(8); // 5 + 3
     expect(stats.dimensions).toBe(128);
   });
+
+  test("should throw an error if insertions parameter is falsy value", async () => {
+    // @ts-ignore
+    const inserted = await client!.insert(null);
+    expect(inserted).toBe(0);
+
+    const stats = await client!.getIndexStats();
+    expect(stats.vectors).toBe(0);
+    expect(stats.dimensions).toBe(128);
+  });
 });

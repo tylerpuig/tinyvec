@@ -5,7 +5,6 @@ declare module "*/tinyvec.node" {
     TinyVecConfig,
     TinyVecInsertion,
   } from "./types";
-
   export function search<TMeta = any>(
     query: Float32Array,
     topK: number,

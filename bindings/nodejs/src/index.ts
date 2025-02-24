@@ -58,6 +58,9 @@ export class TinyVecClient {
     query: tinyvecTypes.NumericArray,
     topK: number
   ): Promise<tinyvecTypes.TinyVecSearchResult<TMeta>[]> {
+    if (typeof topK !== "number" || topK <= 0) {
+      throw new Error("Top K must be a positive integer.");
+    }
     const float32Array = tinyvecUtils.convertToFloat32Array(query);
     return await nativeSearch<TMeta>(float32Array, topK, this.filePath);
   }

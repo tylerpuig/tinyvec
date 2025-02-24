@@ -86,11 +86,75 @@ describe("TinyVecClient Search", () => {
   test("should return correct number of results with topK", async () => {
     await insertTestVectors();
 
+    const indexstats = await client!.getIndexStats();
+    expect(indexstats.vectors).toBe(10);
+    expect(indexstats.dimensions).toBe(128);
+
     const searchVector = createVector(3);
     const topK = 5;
+
     const results = await client!.search(searchVector, topK);
 
     expect(results).toHaveLength(topK);
+  });
+
+  test("should return empty result array if no vectors are found without dimensions in config or insertions", async () => {
+    const randInt = Math.floor(Math.random() * 1000);
+    const newClient = TinyVecClient.connect(dbPath + randInt.toString());
+    const indexStats = await newClient.getIndexStats();
+    expect(indexStats.vectors).toBe(0);
+    expect(indexStats.dimensions).toBe(0);
+
+    const searchVector = createVector(3);
+    const topK = 5;
+
+    const results = await newClient.search(searchVector, topK);
+
+    expect(results).toHaveLength(0);
+  });
+
+  test("should throw an error if topK is less than or equal to 0", async () => {
+    await insertTestVectors();
+    const indexStats = await client!.getIndexStats();
+    expect(indexStats.vectors).toBe(10);
+    expect(indexStats.dimensions).toBe(128);
+
+    const searchVector = createVector(3);
+    const topK = -5;
+
+    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+      "Top K must be a positive integer."
+    );
+  });
+
+  test("should throw an error if topK is not a number", async () => {
+    await insertTestVectors();
+    const indexStats = await client!.getIndexStats();
+    expect(indexStats.vectors).toBe(10);
+    expect(indexStats.dimensions).toBe(128);
+
+    const searchVector = createVector(3);
+    const topK = "5";
+
+    // @ts-ignore
+    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+      "Top K must be a positive integer."
+    );
+  });
+
+  test("should throw an error if search vector is not valid numeric array type", async () => {
+    await insertTestVectors();
+    const indexStats = await client!.getIndexStats();
+    expect(indexStats.vectors).toBe(10);
+    expect(indexStats.dimensions).toBe(128);
+
+    const searchVector = {};
+    const topK = 5;
+
+    // @ts-ignore
+    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+      "Vector conversion failed: Unsupported array type"
+    );
   });
 
   test("should return results in order of similarity", async () => {
