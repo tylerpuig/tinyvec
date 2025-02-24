@@ -78,6 +78,18 @@ export class TinyVecClient {
     };
 
     try {
+      const indexStats = await nativeGetIndexStats(this.filePath);
+      if (indexStats.dimensions === 0) {
+        const buffer = Buffer.alloc(4);
+        const dimensions = this.dimensions || data[0].vector.length;
+        buffer.writeInt32LE(dimensions, 0);
+
+        const fd = fs.openSync(this.filePath, "r+");
+        fs.writeSync(fd, buffer, 0, buffer.length, 4);
+        // Force flush to disk
+        fs.fsyncSync(fd);
+        fs.closeSync(fd);
+      }
       // Convert data with index and metadata context
       const convertedData = data.map((item, index) => {
         try {
@@ -142,9 +154,11 @@ export class TinyVecClient {
     }
   }
 
-  async getIndexStats() {
+  async getIndexStats(): Promise<tinyvecTypes.IndexFileStats> {
     return await nativeGetIndexStats(this.filePath);
   }
 }
 
 export default TinyVecClient;
+
+export * from "./types";
