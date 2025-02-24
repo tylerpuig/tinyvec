@@ -1,5 +1,14 @@
-include README.md
-include LICENSE
-recursive-include src/tinyvec *.py *.dll *.so *.dylib
-recursive-include src/core/src *.c *.h
-recursive-include src/core/include *.h
+# Include the C source files and headers
+include src/core/src/*.c
+include src/core/include/*.h
+
+# Include the compiled libraries
+include src/tinyvec/core/*.dll
+include src/tinyvec/core/*.so
+include src/tinyvec/core/*.dylib
+
+# Include Python modules
+recursive-include src/tinyvec *.py
+
+# Exclude tests
+recursive-exclude tests *

@@ -45,7 +45,7 @@ class TinyVecClient:
                 f"Failed to encode path: {absolute_path}") from e
 
         connection = lib.create_tiny_vec_connection(
-            self.encoded_path, config.dimensions)
+            self.encoded_path, dimensions)
 
         if not connection:
             raise RuntimeError("Failed to create connection")

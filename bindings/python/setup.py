@@ -1,17 +1,17 @@
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 import subprocess
 import platform
 import os
+import sys
 
 IS_MACOS = platform.system() == "Darwin"
+IS_WINDOWS = platform.system() == "Windows"
 
 
 class CustomBuildExt(build_ext):
     def run(self):
-        print("="*50)
-        print("Starting C library build process")
-        print("="*50)
+        # Manually compile and link our shared library
 
         setup_dir = os.path.dirname(os.path.abspath(__file__))
         print(f"Setup directory: {setup_dir}")
@@ -20,47 +20,112 @@ class CustomBuildExt(build_ext):
         source_paths = [os.path.join(
             setup_dir, 'src', 'core', 'src', src) for src in sources]
 
-        print("Source paths:", source_paths)
+        # Use appropriate compiler and flags based on platform
+        if IS_WINDOWS:
+            # For Windows, use MSVC with appropriate flags
+            compiler = 'cl'
+            compile_flags = [
+                '/O2',           # Optimization level (equivalent to -O2)
+                '/arch:AVX',     # Enable AVX instructions
+                '/arch:AVX2',    # Enable AVX2 instructions
+                # Fast floating point model (similar to -ffast-math)
+                '/fp:fast',
+                '/GL',           # Whole program optimization
+                '/Gy',           # Function-level linking
+                '/Oi',           # Enable intrinsic functions
+                '/Ot'            # Favor fast code
+            ]
 
-        compiler = 'clang' if IS_MACOS else 'gcc'
-        compile_flags = ['-O3']
+            # Additional link flags for Windows
+            link_flags = [
+                '/LTCG'          # Link-time code generation
+            ]
 
-        if not IS_MACOS:
-            # Add these flags only for non-macOS systems
-            compile_flags.extend(['-march=native', '-mavx2', '-ffast-math'])
+        else:
+            # Other platforms use GCC/Clang style flags
+            compiler = 'clang' if IS_MACOS else 'gcc'
+            compile_flags = ['-O3']
+            if IS_MACOS:
+                # Check if we're on ARM architecture (Apple Silicon)
+                if platform.machine().startswith('arm'):
+                    compile_flags = [
+                        '-mfpu=neon',  # Enable Neon SIMD instructions for ARM
+                        '-O3',
+                        '-mtune=native'
+                    ]
+                else:
+                    # Intel-based Mac
+                    compile_flags = [
+                        '-O3',
+                        '-mtune=native',
+                        '-mavx',  # Intel SIMD instructions
+                        '-mavx2'
+                    ]
+
+        # Create a directory for object files
+        os.makedirs('obj', exist_ok=True)
 
         # Compile object files
+        obj_files = []
         for src in source_paths:
-            print(f"Compiling {src}")
-            subprocess.run([
-                compiler, *compile_flags, '-c', src
-            ], check=True)
+            obj_file = os.path.join(
+                'obj', os.path.basename(src).replace('.c', '.o'))
+            obj_files.append(obj_file)
+            print(f"Compiling {src} to {obj_file}")
+
+            if IS_WINDOWS:
+                # Windows compilation with MSVC
+                subprocess.run([
+                    'cl', '/c', '/nologo', *
+                    compile_flags, src, f'/Fo{obj_file}'
+                ], check=True)
+            else:
+                # Unix compilation
+                subprocess.run([
+                    compiler, *compile_flags, '-c', src, '-o', obj_file
+                ], check=True)
 
         # Build shared library
-        if platform.system() == "Windows":
+        if IS_WINDOWS:
             lib_name = "tinyveclib.dll"
-            link_cmd = [compiler, '-shared']
-        elif platform.system() == "Darwin":
+            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, lib_name)
+
+            # For Windows, use link.exe
+            print(f"Linking to {output_path}")
+            subprocess.run([
+                'link', '/DLL', '/nologo', '/OUT:' + output_path, *obj_files
+            ], check=True)
+        elif IS_MACOS:
             lib_name = "tinyveclib.dylib"
             link_cmd = [compiler, '-shared', '-dynamiclib',
                         '-undefined', 'dynamic_lookup']
-        else:
-            lib_name = "tinyveclib.so"
-            link_cmd = [compiler, '-shared']
-
-        obj_files = [f.replace('.c', '.o') for f in sources]
-        output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, lib_name)
-
-        link_flags = compile_flags
-        if IS_MACOS:
+            link_flags = compile_flags
             link_flags.append('-Wl,-install_name,@rpath/' + lib_name)
 
-        subprocess.run([
-            *link_cmd, *link_flags, *obj_files,
-            '-o', output_path
-        ], check=True)
+            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, lib_name)
+
+            print(f"Linking to {output_path}")
+            subprocess.run([
+                *link_cmd, *link_flags, *obj_files, '-o', output_path
+            ], check=True)
+        else:
+            # Linux or other Unix
+            lib_name = "tinyveclib.so"
+            link_cmd = [compiler, '-shared']
+            link_flags = compile_flags
+
+            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, lib_name)
+
+            print(f"Linking to {output_path}")
+            subprocess.run([
+                *link_cmd, *link_flags, *obj_files, '-o', output_path
+            ], check=True)
 
         # Clean up object files
         for obj in obj_files:
@@ -70,45 +135,16 @@ class CustomBuildExt(build_ext):
             except OSError as e:
                 print(f"Failed to clean up {obj}: {e}")
 
+        try:
+            os.rmdir('obj')
+            print("Removed obj directory")
+        except OSError as e:
+            print(f"Failed to remove obj directory: {e}")
 
-compile_args = ['-O3']
-link_args = []
 
-if not IS_MACOS:
-    compile_args.extend(['-march=native', '-mavx2', '-ffast-math'])
-
-ext_module = Extension(
-    "tinyvec.core.tinyveclib",
-    sources=[
-        'src/core/src/db.c',
-        'src/core/src/minheap.c',
-        'src/core/src/distance.c',
-        'src/core/src/file.c',
-        'src/core/src/cJSON.c'
-    ],
-    extra_compile_args=compile_args,
-    extra_link_args=link_args
-)
-
+# We're building the library manually and not using setuptools Extension
 setup(
-    name="tinyvec",
-    version="0.1.0",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
-    ext_modules=[ext_module],
-    include_package_data=True,
-    package_data={
-        "tinyvec.core": ["*.dll", "*.so", "*.dylib", "tinyveclib.dll"],
-    },
-    install_requires=[
-        "numpy",
-        "setuptools>=75.8.0",
-        "wheel>=0.45.1"
-    ],
     cmdclass={
         'build_ext': CustomBuildExt,
     },
-    author="tylerpuig",
-    description="Tiny vector database",
-    python_requires=">=3.7",
 )
