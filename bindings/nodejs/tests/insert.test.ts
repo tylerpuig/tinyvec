@@ -153,4 +153,13 @@ describe("TinyVecClient Insert", () => {
     expect(stats.vectors).toBe(0);
     expect(stats.dimensions).toBe(128);
   });
+
+  test("should return 0 if insertions parameter is empty array", async () => {
+    const inserted = await client!.insert([]);
+    expect(inserted).toBe(0);
+
+    const stats = await client!.getIndexStats();
+    expect(stats.vectors).toBe(0);
+    expect(stats.dimensions).toBe(128);
+  });
 });

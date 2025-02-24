@@ -123,7 +123,7 @@ describe("TinyVecClient Search", () => {
     const topK = -5;
 
     await expect(client!.search(searchVector, topK)).rejects.toThrow(
-      "Top K must be a positive integer."
+      "Top K must be a positive number."
     );
   });
 
@@ -138,7 +138,7 @@ describe("TinyVecClient Search", () => {
 
     // @ts-ignore
     await expect(client!.search(searchVector, topK)).rejects.toThrow(
-      "Top K must be a positive integer."
+      "Top K must be a positive number."
     );
   });
 

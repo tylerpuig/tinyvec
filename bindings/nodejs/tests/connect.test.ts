@@ -200,4 +200,18 @@ describe("TinyVecClient Connect", () => {
     expect(header.vectorCount).toBe(42);
     expect(header.dimensions).toBe(128);
   });
+
+  test("should throw an error if dimensions is not a number", async () => {
+    const incorrectConfig = { dimensions: "128" };
+    expect(() =>
+      // @ts-ignore
+      TinyVecClient.connect(dbPath, incorrectConfig)
+    ).toThrow("Dimensions must be a positive number.");
+
+    const nullDimensionsConfig = { dimensions: null };
+    expect(() =>
+      // @ts-ignore
+      TinyVecClient.connect(dbPath, nullDimensionsConfig)
+    ).toThrow("Dimensions must be a positive number.");
+  });
 });

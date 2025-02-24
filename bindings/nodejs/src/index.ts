@@ -27,6 +27,12 @@ export class TinyVecClient {
   ): TinyVecClient {
     const absolutePath = tinyvecUtils.ensureAbsolutePath(filePath);
     const fExists = tinyvecUtils.fileExists(absolutePath);
+
+    if (config?.dimensions !== undefined) {
+      if (typeof config.dimensions !== "number" || config.dimensions <= 0) {
+        throw new Error("Dimensions must be a positive number.");
+      }
+    }
     if (!fExists) {
       const vectorCount = 0;
       const dimensions = config?.dimensions ?? 0;
@@ -59,7 +65,7 @@ export class TinyVecClient {
     topK: number
   ): Promise<tinyvecTypes.TinyVecSearchResult<TMeta>[]> {
     if (typeof topK !== "number" || topK <= 0) {
-      throw new Error("Top K must be a positive integer.");
+      throw new Error("Top K must be a positive number.");
     }
     const float32Array = tinyvecUtils.convertToFloat32Array(query);
     return await nativeSearch<TMeta>(float32Array, topK, this.filePath);
