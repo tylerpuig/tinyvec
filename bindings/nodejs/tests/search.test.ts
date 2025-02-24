@@ -1,4 +1,4 @@
-import TinyVecClient from "../src/index";
+import { TinyVecClient } from "../src/index";
 import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
@@ -28,6 +28,12 @@ describe("TinyVecClient Search", () => {
     }
     return normalizeVector(vector);
   }
+
+  type MyInsertType = {
+    id: number;
+    text: string;
+    category: string;
+  };
 
   // Helper to prepare test data
   async function insertTestVectors() {
@@ -73,14 +79,11 @@ describe("TinyVecClient Search", () => {
 
     // Search using the exact same vector as document_5
     const searchVector = createVector(5);
-    const results = await client!.search<(typeof insertions)[0]["metadata"]>(
-      searchVector,
-      1
-    );
+    const results = await client!.search<MyInsertType>(searchVector, 1);
 
     expect(results).toHaveLength(1);
-    expect(results[0].metadata.id).toBe(5);
-    expect(results[0].metadata.text).toBe("document_5");
+    expect(results[0]?.metadata.id).toBe(5);
+    expect(results[0]?.metadata.text).toBe("document_5");
   });
 
   test("should return correct number of results with topK", async () => {
@@ -194,26 +197,32 @@ describe("TinyVecClient Search", () => {
   });
 
   test("should preserve metadata types in search results", async () => {
+    type MyMetadataType = {
+      id: number;
+      numeric: number;
+      string: string;
+      boolean: boolean;
+      nested: { key: string };
+      array: number[];
+    };
+    const metadata: MyMetadataType = {
+      id: 1,
+      numeric: 42,
+      string: "test",
+      boolean: true,
+      nested: { key: "value" },
+      array: [1, 2, 3],
+    };
     const insertions: TinyVecInsertion[] = [
       {
         vector: createVector(0),
-        metadata: {
-          id: 1,
-          numeric: 42,
-          string: "test",
-          boolean: true,
-          nested: { key: "value" },
-          array: [1, 2, 3],
-        },
+        metadata: metadata,
       },
     ];
 
     await client!.insert(insertions);
 
-    const results = await client!.search<(typeof insertions)[0]["metadata"]>(
-      createVector(0),
-      1
-    );
+    const results = await client!.search<MyMetadataType>(createVector(0), 1);
 
     expect(results[0].metadata).toEqual(insertions[0].metadata);
     expect(typeof results[0].metadata.numeric).toBe("number");
