@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import path from "path";
-import type { NumericArray } from "./types";
+import type { NumericArray, JsonValue } from "./types";
 
 export function fileExists(filePath: string): boolean {
   return fs.existsSync(filePath);
@@ -21,7 +21,7 @@ export function ensureAbsolutePath(filePath: string): string {
 export function convertToFloat32Array(
   arr: NumericArray,
   index?: number,
-  metadata?: Record<string, any>
+  metadata?: JsonValue
 ): Float32Array {
   try {
     // If it's already a Float32Array, return it
@@ -56,7 +56,7 @@ export class VectorConversionError extends Error {
   constructor(
     message: string,
     public index?: number,
-    public metadata?: Record<string, any>
+    public metadata?: JsonValue
   ) {
     super(message);
     this.name = "VectorConversionError";

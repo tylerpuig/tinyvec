@@ -10,7 +10,7 @@ import * as tinyvecTypes from "./types";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
 
-export class TinyVecClient {
+class TinyVecClient {
   private filePath: string;
   private dimensions: number = 0;
 
@@ -168,6 +168,5 @@ export class TinyVecClient {
   }
 }
 
-export default TinyVecClient;
-
+export { TinyVecClient };
 export * from "./types";
