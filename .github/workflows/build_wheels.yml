@@ -33,15 +33,41 @@ jobs:
         run: |
           python -m pip install cibuildwheel==2.16.5
 
+      - name: Debug package structure
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          echo "------- pyproject.toml -------"
+          cat pyproject.toml || echo "No pyproject.toml found"
+          echo "------- setup.py -------"
+          cat setup.py || echo "No setup.py found"
+          echo "------- Package structure -------"
+          find . -type f -name "*.py" | sort
+
       - name: Build wheels
         run: |
-          python -m cibuildwheel --output-dir wheelhouse
+          set -x  # Enable verbose mode for bash (Linux/macOS)
+          python -m cibuildwheel --output-dir wheelhouse --verbose
+        if: runner.os != 'Windows'
         env:
           CIBW_BUILD: "cp311-*" # Only build for Python 3.11
           CIBW_ARCHS_MACOS: "x86_64 arm64" # Build for both Intel and M1 Macs
           CIBW_BEFORE_BUILD_WINDOWS: "pip install setuptools wheel numpy"
           CIBW_BEFORE_BUILD_MACOS: "pip install setuptools wheel numpy"
           CIBW_BEFORE_BUILD_LINUX: "pip install setuptools wheel numpy"
+          CIBW_SKIP: "pp* *musllinux*"
+          # If your C source files are in a parent directory, add package dir config
+          CIBW_ENVIRONMENT: "SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0"
+          # If needed, specify the relative path to C sources
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: ""
+
+      - name: Build wheels (Windows)
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse --verbose
+        if: runner.os == 'Windows'
+        env:
+          CIBW_BUILD: "cp311-*" # Only build for Python 3.11
+          CIBW_BEFORE_BUILD_WINDOWS: "pip install setuptools wheel numpy"
           CIBW_SKIP: "pp* *musllinux*"
           # If your C source files are in a parent directory, add package dir config
           CIBW_ENVIRONMENT: "SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0"
