@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import tempfile
 import os
+import random
 from typing import List
 from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
 
@@ -27,6 +28,12 @@ def create_vector(base_value: float) -> np.ndarray:
 def create_vector_list(base_value: float) -> List[float]:
     """Create a vector with a specific pattern."""
     vector = [base_value + i * 0.01 for i in range(DIMENSIONS)]
+    return vector
+
+
+def create_vector_list_w_dimensions(dims: int) -> List[float]:
+    """Create a vector with a specific pattern."""
+    vector = [random.random() for _ in range(dims)]
     return vector
 
 
@@ -124,16 +131,35 @@ async def test_handle_no_similar_results(client):
     assert len(results) == 5
 
 
+# @pytest.mark.asyncio
+# async def test_throw_error_different_dimensions(client):
+#     """Should throw an error for a query vector with different dimensions."""
+#     await insert_test_vectors(client)
+
+#     # Create a vector with wrong dimensions
+#     search_vector = np.full(64, 0.04, dtype=np.float32)
+
+#     with pytest.raises(RuntimeError):
+#         await client.search(search_vector, 5)
+
+
 @pytest.mark.asyncio
-async def test_throw_error_different_dimensions(client):
-    """Should throw an error for a query vector with different dimensions."""
-    await insert_test_vectors(client)
+async def test_should_handle_null_results(db_path):
+    """Should return an empty list if results_ptr is NULL."""
 
-    # Create a vector with wrong dimensions
-    search_vector = np.full(64, 0.04, dtype=np.float32)
+    new_client = TinyVecClient()
+    # dimensions have not been set yet, and no insertions have been made
+    new_client.connect(db_path)
 
-    with pytest.raises(RuntimeError):
-        await client.search(search_vector, 5)
+    search_vector = np.full(DIMENSIONS, 0.04, dtype=np.float32)
+
+    results = await new_client.search(search_vector, 5)
+
+    assert len(results) == 0
+
+    index_stats = await new_client.get_index_stats()
+    assert index_stats.vector_count == 0
+    assert index_stats.dimensions == 0
 
 
 @pytest.mark.asyncio

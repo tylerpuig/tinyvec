@@ -1,7 +1,7 @@
 from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
 import pytest
 import numpy as np
-from typing import List
+from typing import List, Dict, Any, cast
 from dataclasses import dataclass
 import random
 
@@ -154,9 +154,128 @@ async def test_insert_list(client):
         )
     ]
 
-    # Should return 0 for invalid insertions
     inserted = await client.insert(insertions)
     assert inserted == 1
 
     stats = await client.get_index_stats()
     assert stats.vector_count == 1
+
+
+@pytest.mark.asyncio
+async def test_insert_list_update_dimensions(db_path):
+    """Should update file dimensions if inserting a list and dimensions have not been set."""
+
+    new_client = TinyVecClient()
+    new_client.connect(db_path)
+
+    index_stats = await new_client.get_index_stats()
+    assert index_stats.dimensions == 0
+    assert index_stats.vector_count == 0
+
+    insertions = [
+        TinyVecInsertion(
+            vector=generate_random_vector_list(128),
+            metadata={"id": 1}
+        )
+    ]
+
+    inserted = await new_client.insert(insertions)
+    assert inserted == 1
+
+    stats = await new_client.get_index_stats()
+    assert stats.vector_count == 1
+    assert stats.dimensions == 128
+
+    search_results = await new_client.search(generate_random_vector_list(128), 1)
+    assert len(search_results) == 1
+
+
+@pytest.mark.asyncio
+async def test_allow_null_metadata(db_path):
+    """Should allow inserting vectors with null metadata."""
+
+    new_client = TinyVecClient()
+    new_client.connect(db_path)
+
+    index_stats = await new_client.get_index_stats()
+    assert index_stats.dimensions == 0
+    assert index_stats.vector_count == 0
+
+    insertion = TinyVecInsertion(
+        vector=generate_random_vector_list(128),
+        metadata=None
+    )
+
+    inserted = await new_client.insert([insertion])
+    assert inserted == 1
+
+    stats = await new_client.get_index_stats()
+    assert stats.vector_count == 1
+    assert stats.dimensions == 128
+
+    search_results = await new_client.search(generate_random_vector_list(128), 1)
+    assert len(search_results) == 1
+    assert search_results[0].metadata == None
+
+
+@pytest.mark.asyncio
+async def test_allow_nested_metadata(db_path):
+    """Should allow inserting vectors with nested metadata."""
+
+    new_client = TinyVecClient()
+    new_client.connect(db_path)
+
+    index_stats = await new_client.get_index_stats()
+    assert index_stats.dimensions == 0
+    assert index_stats.vector_count == 0
+
+    insertion = TinyVecInsertion(
+        vector=generate_random_vector_list(128),
+        metadata={"id": 1, "nested": {"key": "value"}}
+    )
+
+    inserted = await new_client.insert([insertion])
+    assert inserted == 1
+
+    stats = await new_client.get_index_stats()
+    assert stats.vector_count == 1
+    assert stats.dimensions == 128
+
+    search_results = await new_client.search(generate_random_vector_list(128), 1)
+    assert len(search_results) == 1
+    metadata = search_results[0].metadata
+    assert metadata != None
+    nested = cast(Dict[str, Any], metadata.get("nested", {}))
+    assert nested.get("key") == "value"
+
+
+@pytest.mark.asyncio
+async def test_allow_nested_metadata_lists(db_path):
+    """Should allow inserting vectors with nested metadata lists."""
+
+    new_client = TinyVecClient()
+    new_client.connect(db_path)
+
+    index_stats = await new_client.get_index_stats()
+    assert index_stats.dimensions == 0
+    assert index_stats.vector_count == 0
+
+    insertion = TinyVecInsertion(
+        vector=generate_random_vector_list(128),
+        metadata={"id": 1, "nested": {"list": [1, 2, 3]}}
+    )
+
+    inserted = await new_client.insert([insertion])
+    assert inserted == 1
+
+    stats = await new_client.get_index_stats()
+    assert stats.vector_count == 1
+    assert stats.dimensions == 128
+
+    search_results = await new_client.search(generate_random_vector_list(128), 1)
+    assert len(search_results) == 1
+    metadata = search_results[0].metadata
+    assert metadata != None
+
+    nested = cast(Dict[str, Any], metadata.get("nested", []))
+    assert nested.get("list") == [1, 2, 3]
