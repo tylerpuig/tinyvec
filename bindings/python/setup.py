@@ -1,8 +1,16 @@
-from setuptools import setup
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
+from setuptools.command.install import install
+from setuptools.command.bdist_egg import bdist_egg
+from setuptools.command.sdist import sdist
+from wheel.bdist_wheel import bdist_wheel
+
 import subprocess
 import platform
 import os
+import sys
+import shutil
+from pathlib import Path
 
 IS_MACOS = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
@@ -10,41 +18,105 @@ IS_WINDOWS = platform.system() == "Windows"
 
 class CustomBuildExt(build_ext):
     def run(self):
+        print("\n" + "="*80)
+        print("CUSTOM BUILD EXTENSION RUNNING WITH GCC + AVX SUPPORT")
+        print("="*80)
+
         # Manually compile and link the shared library
         setup_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"Setup directory: {setup_dir}")
 
         sources = ['db.c', 'minheap.c', 'distance.c', 'file.c', 'cJSON.c']
         source_paths = [os.path.join(
             setup_dir, 'src', 'core', 'src', src) for src in sources]
 
-        if IS_WINDOWS:
-            compiler = 'cl'  # Use MSVC
-            # Optimizations & DLL build
-            compile_flags = ['/O2', '/LD', '/MD', '/DVERSION_INFO=\\"1.0\\"']
-            link_flags = ['/link', '/DLL']
-        else:
-            # Other platforms use GCC/Clang style flags
-            compiler = 'clang' if IS_MACOS else 'gcc'
-            compile_flags = ['-O3']
-            if IS_MACOS:
-                # Check if on ARM architecture (Apple Silicon)
-                if platform.machine().startswith('arm'):
-                    compile_flags = [
-                        '-mfpu=neon',  # Neon SIMD instructions for ARM
-                        '-O3',
-                        '-mtune=native'
-                    ]
-                else:
-                    # Intel-based Mac
-                    compile_flags = [
-                        '-O3',
-                        '-mtune=native',
-                        '-mavx',  # Intel SIMD instructions
-                        '-mavx2'
-                    ]
+        # Verify source files exist
+        for src in source_paths:
+            if not os.path.exists(src):
+                print(f"ERROR: Source file does not exist: {src}")
+                return
+            else:
+                print(f"Found source file: {src}")
 
         # Create a directory for object files
         os.makedirs('obj', exist_ok=True)
+        print("Created obj directory")
+
+        # Create output directory
+        output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Output directory: {output_dir}")
+
+        # For all platforms: enable AVX instructions
+        # Common flags for all platforms
+        compile_flags = [
+            '-O3',          # Optimization level
+            '-fPIC',        # Position Independent Code
+            '-mavx',        # Enable AVX instructions
+            '-mavx2',       # Enable AVX2 instructions
+            '-mfma'         # Enable FMA instructions (often used with AVX)
+        ]
+
+        # Determine compiler and platform-specific settings
+        if IS_WINDOWS:
+            # Use mingw32 on Windows
+            compiler = 'gcc'  # or 'x86_64-w64-mingw32-gcc' if using specific mingw
+            print("\nUsing MinGW GCC on Windows with AVX support")
+
+            # Check if GCC is available
+            try:
+                subprocess.run(
+                    [compiler, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                print(f"{compiler} is available")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print(f"ERROR: {compiler} not found in PATH")
+                print("Make sure you have MinGW installed and in your PATH")
+                return
+
+            lib_name = "tinyveclib.dll"
+        elif IS_MACOS:
+            compiler = 'gcc'  # or use 'clang' if preferred
+            print("\nUsing GCC on macOS with AVX support")
+
+            # Check if GCC is available
+            try:
+                subprocess.run(
+                    [compiler, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                print(f"{compiler} is available")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print(f"ERROR: {compiler} not found in PATH")
+                print("Consider installing GCC with: brew install gcc")
+                return
+
+            # ARM Macs don't support AVX, so we need to check
+            if platform.machine().startswith('arm'):
+                print(
+                    "WARNING: ARM Mac detected. AVX instructions are not supported on Apple Silicon.")
+                print("Modifying flags for ARM compatibility...")
+                # Remove AVX flags for ARM
+                compile_flags = [
+                    flag for flag in compile_flags if not flag.startswith('-mavx')]
+                compile_flags.extend([
+                    '-mfpu=neon',  # Use Neon instead for ARM
+                ])
+
+            lib_name = "tinyveclib.dylib"
+        else:
+            # Linux or other Unix
+            compiler = 'gcc'
+            print("\nUsing GCC on Linux/Unix with AVX support")
+
+            # Check if GCC is available
+            try:
+                subprocess.run(
+                    [compiler, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                print(f"{compiler} is available")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print(f"ERROR: {compiler} not found in PATH")
+                print("Install GCC with your package manager")
+                return
+
+            lib_name = "tinyveclib.so"
 
         # Compile object files
         obj_files = []
@@ -53,79 +125,175 @@ class CustomBuildExt(build_ext):
                 'obj', os.path.basename(src).replace('.c', '.o'))
             obj_files.append(obj_file)
 
-            # Use the same compilation approach for all platforms
-            cmd = [
+            compile_cmd = [
                 compiler, *compile_flags, '-c', src, '-o', obj_file
             ]
-            subprocess.run(cmd, check=True)
 
-        # Build shared library
+            print(f"\nCompiling: {os.path.basename(src)}")
+            print(f"Command: {' '.join(compile_cmd)}")
+
+            try:
+                result = subprocess.run(compile_cmd,
+                                        check=True,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        text=True)
+                if result.stdout:
+                    print(f"Compilation output: {result.stdout}")
+
+                # Verify object file was created
+                if os.path.exists(obj_file):
+                    print(f"Created object file: {obj_file}")
+                else:
+                    print(f"ERROR: Failed to create object file: {obj_file}")
+                    return
+
+            except subprocess.CalledProcessError as e:
+                print(f"Compilation ERROR: {e}")
+                if e.stdout:
+                    print(f"STDOUT: {e.stdout}")
+                if e.stderr:
+                    print(f"STDERR: {e.stderr}")
+                return
+
+        # Link the shared library
+        output_path = os.path.join(output_dir, lib_name)
+
+        print("\n" + "-"*40)
+        print(f"LINKING SHARED LIBRARY: {output_path}")
+        print("-"*40)
+
         if IS_WINDOWS:
-            lib_name = "tinyveclib.dll"
-            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, lib_name)
-
-            cmd = [
-                compiler, '-shared', *compile_flags,
-                '-o', output_path, *obj_files
+            # MinGW linking on Windows
+            link_cmd = [
+                compiler,
+                '-shared',
+                '-o', output_path,
+                *obj_files,
+                *compile_flags
             ]
         elif IS_MACOS:
-            lib_name = "tinyveclib.dylib"
-            link_cmd = [compiler, '-shared', '-dynamiclib',
-                        '-undefined', 'dynamic_lookup']
-            link_flags = compile_flags
-            link_flags.append('-Wl,-install_name,@rpath/' + lib_name)
-
-            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, lib_name)
-
-            cmd = [
-                *link_cmd, *link_flags, *obj_files, '-o', output_path
+            # macOS linking
+            link_cmd = [
+                compiler,
+                '-shared',
+                '-dynamiclib',
+                '-o', output_path,
+                *obj_files,
+                *compile_flags,
+                '-Wl,-install_name,@rpath/' + lib_name
             ]
-
-            subprocess.run(cmd, check=True)
         else:
-            # Linux or other Unix
-            lib_name = "tinyveclib.so"
-            link_cmd = [compiler, '-shared']
-            link_flags = compile_flags
-
-            output_dir = os.path.join(setup_dir, 'src', 'tinyvec', 'core')
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, lib_name)
-
-            cmd = [
-                *link_cmd, *link_flags, *obj_files, '-o', output_path
+            # Linux linking
+            link_cmd = [
+                compiler,
+                '-shared',
+                '-o', output_path,
+                *obj_files,
+                *compile_flags
             ]
 
-            subprocess.run(cmd, check=True)
+        print(f"Link command: {' '.join(link_cmd)}")
+
+        try:
+            result = subprocess.run(link_cmd,
+                                    check=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    text=True)
+            if result.stdout:
+                print(f"Linking output: {result.stdout}")
+
+            # Verify library was created
+            if os.path.exists(output_path):
+                print(f"SUCCESS: Created shared library: {output_path}")
+                print(f"Library size: {os.path.getsize(output_path)} bytes")
+
+                # Create a manifest file to ensure package data is included
+                manifest_dir = os.path.join(setup_dir, "MANIFEST.in")
+                with open(manifest_dir, "w") as f:
+                    f.write(f"include src/tinyvec/core/{lib_name}\n")
+                print(f"Created MANIFEST.in file")
+            else:
+                print(f"ERROR: Failed to create shared library: {output_path}")
+                return
+
+        except subprocess.CalledProcessError as e:
+            print(f"Linking ERROR: {e}")
+            if e.stdout:
+                print(f"STDOUT: {e.stdout}")
+            if e.stderr:
+                print(f"STDERR: {e.stderr}")
+            return
 
         # Clean up object files
+        print("\nCleaning up...")
         for obj in obj_files:
             try:
-                os.remove(obj)
-                print(f"Cleaned up: {obj}")
+                if os.path.exists(obj):
+                    os.remove(obj)
+                    print(f"Cleaned up: {obj}")
             except OSError as e:
                 print(f"Failed to clean up {obj}: {e}")
 
         try:
-            os.rmdir('obj')
-
+            if os.path.exists('obj') and len(os.listdir('obj')) == 0:
+                os.rmdir('obj')
+                print("Removed obj directory")
         except OSError as e:
             print(f"Failed to remove obj directory: {e}")
 
+        print("\nCustomBuildExt completed")
+
+
+# Custom sdist to ensure the shared library is included in the source distribution
+class CustomSdist(sdist):
+    def run(self):
+        self.run_command('build_ext')
+        super().run()
+
+
+# Custom wheel to ensure the shared library is included in the wheel
+class CustomBdistWheel(bdist_wheel):
+    def run(self):
+        self.run_command('build_ext')
+        super().run()
+
+
+# Get package data files
+def get_package_data_files():
+    data_files = []
+
+    # Add the shared library files based on platform
+    if IS_WINDOWS:
+        data_files.append(
+            ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dll']))
+    elif IS_MACOS:
+        data_files.append(
+            ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dylib']))
+    else:
+        data_files.append(('tinyvec/core', ['src/tinyvec/core/tinyveclib.so']))
+
+    return data_files
+
 
 setup(
+    name="tinyvec",
+    version="0.1.0",
+    description="A tiny vector database",
+    author="Your Name",
+    author_email="your.email@example.com",
     cmdclass={
         'build_ext': CustomBuildExt,
+        'sdist': CustomSdist,
+        'bdist_wheel': CustomBdistWheel,
     },
     package_dir={"": "src"},
-    packages=["tinyvec", "tinyvec.core"],
+    packages=find_packages(where="src"),
     package_data={
         "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
     },
-    zip_safe=False,
+    data_files=get_package_data_files(),
     include_package_data=True,
+    zip_safe=False,
 )

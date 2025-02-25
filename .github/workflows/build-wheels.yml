@@ -1,4 +1,4 @@
-name: Build Wheels with cibuildwheel
+name: Build Python Package
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+  build_package:
+    name: Build package on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,37 +24,33 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Install cibuildwheel
-      - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.17.0
-
-      # Set environment variables for cibuildwheel
-      - name: Set up cibuildwheel
-        shell: bash
+      # Install dependencies
+      - name: Install dependencies
         run: |
-          # Skip PyPy builds
-          echo "CIBW_SKIP=pp*" >> $GITHUB_ENV
-          # Pre-install numpy as a build dependency
-          echo "CIBW_BEFORE_BUILD=pip install numpy" >> $GITHUB_ENV
-          # Configure specifically for Linux to install the right packages
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            echo "CIBW_BEFORE_BUILD_LINUX=yum install -y gcc gcc-c++ make || apt-get update && apt-get install -y gcc g++ make" >> $GITHUB_ENV
-          fi
-          # Don't require NumPy during package import test
-          echo "CIBW_TEST_REQUIRES=pytest" >> $GITHUB_ENV
-          echo "CIBW_TEST_COMMAND=python -c \"import tinyvec; print('Successfully imported tinyvec')\"" >> $GITHUB_ENV
-          # Skip pure-Python wheel creation
-          echo "CIBW_BUILD=*" >> $GITHUB_ENV
+          python -m pip install --upgrade pip
+          python -m pip install numpy build setuptools wheel
 
-      # Build the wheels
-      - name: Build wheels
+      # Set up system dependencies for Linux
+      - name: Set up system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make
+
+      # Build extension modules first
+      - name: Build extensions
         working-directory: ./bindings/python
-        run: python -m cibuildwheel --output-dir dist
+        run: python setup.py build_ext
 
-      # Upload wheels as artifacts
-      - name: Upload wheels
+      # Use build to create both wheel and sdist
+      - name: Build package
+        working-directory: ./bindings/python
+        run: python -m build
+
+      # Upload built packages as artifacts
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
-          path: ./bindings/python/dist/*.whl
+          name: packages-${{ matrix.os }}
+          path: ./bindings/python/dist/*
           retention-days: 14
