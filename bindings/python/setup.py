@@ -303,9 +303,16 @@ class CustomBdistWheel(bdist_wheel):
         # Override the tag generation to ensure platform tag is included
         python, abi, plat = super().get_tag()
 
-        # For macOS, specify whether it's a universal2 build
-        if IS_MACOS and os.environ.get('MACOS_UNIVERSAL', 'false').lower() == 'true':
-            plat = 'macosx_10_9_universal2'
+        # For macOS, handle architecture-specific builds
+        if IS_MACOS:
+            archflags = os.environ.get('ARCHFLAGS', '')
+            if 'arm64' in archflags:
+                plat = 'macosx_11_0_arm64'
+            elif 'x86_64' in archflags:
+                plat = 'macosx_10_9_x86_64'
+            # Only use universal2 if explicitly requested
+            elif os.environ.get('MACOS_UNIVERSAL', 'false').lower() == 'true':
+                plat = 'macosx_11_0_universal2'
 
         return python, abi, plat
 
