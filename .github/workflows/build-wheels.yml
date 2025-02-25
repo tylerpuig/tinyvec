@@ -15,13 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [""]
         include:
-          - os: ubuntu-latest
-          - os: windows-latest
-          - os: macos-latest
-            arch: x86_64
           - os: macos-latest
             arch: arm64
+        exclude:
+          - os: macos-latest
+            arch: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +72,6 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
+          name: packages-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}-py${{ matrix.python-version }}
           path: ./bindings/python/dist/*
           retention-days: 14
