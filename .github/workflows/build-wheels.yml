@@ -1,4 +1,4 @@
-name: Build Wheels with Conda
+name: Build Wheels with cibuildwheel
 
 on:
   push:
@@ -15,73 +15,46 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Conda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python-version }}
-          channels: conda-forge,defaults
-          activate-environment: build-env
+          python-version: "3.11"
 
-      - name: Conda info
-        shell: bash -l {0}
+      # Install cibuildwheel
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel==2.17.0
+
+      # Set environment variables for cibuildwheel
+      - name: Set up cibuildwheel
+        shell: bash
         run: |
-          conda info
-          conda list
+          # Skip PyPy builds
+          echo "CIBW_SKIP=pp*" >> $GITHUB_ENV
+          # Pre-install numpy as a build dependency
+          echo "CIBW_BEFORE_BUILD=pip install numpy" >> $GITHUB_ENV
+          # Configure specifically for Linux to install the right packages
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            echo "CIBW_BEFORE_BUILD_LINUX=yum install -y gcc gcc-c++ make || apt-get update && apt-get install -y gcc g++ make" >> $GITHUB_ENV
+          fi
+          # Don't require NumPy during package import test
+          echo "CIBW_TEST_REQUIRES=pytest" >> $GITHUB_ENV
+          echo "CIBW_TEST_COMMAND=python -c \"import tinyvec; print('Successfully imported tinyvec')\"" >> $GITHUB_ENV
+          # Skip pure-Python wheel creation
+          echo "CIBW_BUILD=*" >> $GITHUB_ENV
 
-      - name: Install build dependencies
-        shell: bash -l {0}
-        run: |
-          conda install -y pip numpy setuptools wheel build
-          python -m pip install --upgrade pip
-
-      # Install platform-specific dependencies
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        shell: bash -l {0}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc build-essential
-
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        shell: bash -l {0}
-        run: |
-          conda install -y llvm-openmp clang clangxx
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CXX=clang++" >> $GITHUB_ENV
-
-      - name: Setup MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      # Build the wheel
-      - name: Build wheel
-        shell: bash -l {0}
+      # Build the wheels
+      - name: Build wheels
         working-directory: ./bindings/python
-        run: |
-          mkdir -p dist
-          python -m build --wheel --outdir dist/
-
-      # Test the built wheel
-      - name: Test wheel installation
-        shell: bash -l {0}
-        working-directory: ./bindings/python
-        run: |
-          # Create a test environment
-          python -m pip install --force-reinstall --no-index --find-links=dist tinyvec
-          # Quick test import
-          python -c "import tinyvec; print(f'Successfully imported tinyvec')"
+        run: python -m cibuildwheel --output-dir dist
 
       # Upload wheels as artifacts
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: wheels-${{ matrix.os }}
           path: ./bindings/python/dist/*.whl
           retention-days: 14
