@@ -1,4 +1,4 @@
-name: Build Wheels
+name: Build Wheels with Conda
 
 on:
   push:
@@ -15,32 +15,44 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11.5"]
+        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
+          auto-update-conda: true
           python-version: ${{ matrix.python-version }}
+          channels: conda-forge,defaults
+          activate-environment: build-env
+
+      - name: Conda info
+        shell: bash -l {0}
+        run: |
+          conda info
+          conda list
 
       - name: Install build dependencies
+        shell: bash -l {0}
         run: |
+          conda install -y pip numpy setuptools wheel build
           python -m pip install --upgrade pip
-          python -m pip install build wheel setuptools
 
       # Install platform-specific dependencies
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
+        shell: bash -l {0}
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc build-essential
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
+        shell: bash -l {0}
         run: |
-          brew install llvm
+          conda install -y llvm-openmp clang clangxx
           echo "CC=clang" >> $GITHUB_ENV
           echo "CXX=clang++" >> $GITHUB_ENV
 
@@ -50,6 +62,7 @@ jobs:
 
       # Build the wheel
       - name: Build wheel
+        shell: bash -l {0}
         working-directory: ./bindings/python
         run: |
           mkdir -p dist
@@ -57,6 +70,7 @@ jobs:
 
       # Test the built wheel
       - name: Test wheel installation
+        shell: bash -l {0}
         working-directory: ./bindings/python
         run: |
           # Create a test environment
