@@ -99,6 +99,6 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}-py${{ matrix.python-version }}
+          name: tinyvec-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}-py${{ matrix.python-version }}
           path: ./bindings/python/dist/*
           retention-days: 14
