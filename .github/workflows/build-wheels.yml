@@ -14,7 +14,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # Linux build
+          - os: ubuntu-latest
+            platform: linux
+
+          # Windows build
+          - os: windows-latest
+            platform: windows
+
+          # macOS Intel build
+          - os: macos-latest
+            platform: macos-intel
+
+          # macOS ARM build (using labels for GitHub-hosted ARM runners)
+          - os: macos-14
+            platform: macos-arm
 
     steps:
       - uses: actions/checkout@v4
@@ -32,15 +47,10 @@ jobs:
 
       # Set up system dependencies for Linux
       - name: Set up system dependencies (Linux)
-        if: runner.os == 'Linux'
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc g++ make
-
-      - name: Configure macOS for universal2 build
-        if: runner.os == 'macOS'
-        run: |
-          echo "MACOS_UNIVERSAL=true" >> $GITHUB_ENV
 
       # Build extension modules first
       - name: Build extensions
@@ -56,6 +66,6 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.os }}
+          name: packages-${{ matrix.platform }}
           path: ./bindings/python/dist/*
           retention-days: 14

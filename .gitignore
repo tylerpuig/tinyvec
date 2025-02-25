@@ -57,3 +57,4 @@ Thumbs.db
 /bindings/nodejs/temp/
 *.db
 *.tgz
+*.in

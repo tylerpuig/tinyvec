@@ -47,14 +47,10 @@ class CustomBuildExt(build_ext):
         os.makedirs(output_dir, exist_ok=True)
         print(f"Output directory: {output_dir}")
 
-        # For all platforms: enable AVX instructions
         # Common flags for all platforms
         compile_flags = [
             '-O3',          # Optimization level
             '-fPIC',        # Position Independent Code
-            '-mavx',        # Enable AVX instructions
-            '-mavx2',       # Enable AVX2 instructions
-            '-mfma'         # Enable FMA instructions (often used with AVX)
         ]
 
         # Determine compiler and platform-specific settings
@@ -62,6 +58,13 @@ class CustomBuildExt(build_ext):
             # Use mingw32 on Windows
             compiler = 'gcc'  # or 'x86_64-w64-mingw32-gcc' if using specific mingw
             print("\nUsing MinGW GCC on Windows with AVX support")
+
+            # Add AVX instructions for Windows
+            compile_flags.extend([
+                '-mavx',        # Enable AVX instructions
+                '-mavx2',       # Enable AVX2 instructions
+                '-mfma'         # Enable FMA instructions (often used with AVX)
+            ])
 
             # Check if GCC is available
             try:
@@ -74,11 +77,10 @@ class CustomBuildExt(build_ext):
                 return
 
             lib_name = "tinyveclib.dll"
-        # Modify this section in your CustomBuildExt class to properly handle universal build
 
         elif IS_MACOS:
             compiler = 'gcc'  # or use 'clang' if preferred
-            print("\nUsing GCC on macOS for universal build")
+            print("\nUsing GCC on macOS")
 
             # Check if GCC is available
             try:
@@ -86,138 +88,45 @@ class CustomBuildExt(build_ext):
                     [compiler, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
                 print(f"{compiler} is available")
             except (subprocess.SubprocessError, FileNotFoundError):
-                print(f"ERROR: {compiler} not found in PATH")
-                print("Consider installing GCC with: brew install gcc")
-                return
-
-            # Check architecture and handle universal builds
-            is_arm = platform.machine().startswith('arm')
-            print(
-                f"Detected macOS architecture: {'ARM64' if is_arm else 'x86_64'}")
-
-            # Check for universal build environment variable
-            build_universal = os.environ.get(
-                'MACOS_UNIVERSAL', 'false').lower() == 'true'
-
-            if build_universal:
-                print("Building universal binary for both ARM64 and x86_64")
-                # For universal binary, build two separate libraries and then combine
-                arch_targets = ['arm64', 'x86_64']
-
-                # Remove architecture-specific flags
-                base_flags = [
-                    flag for flag in compile_flags if not flag.startswith('-m')]
-
-                # Temporary libraries for each architecture
-                temp_libs = []
-
-                for arch in arch_targets:
-                    print(f"\nCompiling for {arch} architecture...")
-                    arch_output = os.path.join(
-                        output_dir, f"tinyveclib_{arch}.dylib")
-                    temp_libs.append(arch_output)
-
-                    # Architecture-specific flags
-                    if arch == 'arm64':
-                        arch_flags = ['-mfpu=neon', '-arch', 'arm64']
-                    else:
-                        arch_flags = ['-mavx', '-mavx2',
-                                      '-mfma', '-arch', 'x86_64']
-
-                    # Compile object files for this architecture
-                    arch_obj_files = []
-                    obj_dir = f'obj_{arch}'
-                    os.makedirs(obj_dir, exist_ok=True)
-
-                    for src in source_paths:
-                        obj_file = os.path.join(
-                            obj_dir, os.path.basename(src).replace('.c', '.o'))
-                        arch_obj_files.append(obj_file)
-
-                        compile_cmd = [
-                            compiler, *base_flags, *arch_flags, '-c', src, '-o', obj_file
-                        ]
-
-                        print(f"Compiling for {arch}: {os.path.basename(src)}")
-                        print(f"Command: {' '.join(compile_cmd)}")
-
-                        try:
-                            result = subprocess.run(compile_cmd,
-                                                    check=True,
-                                                    stdout=subprocess.PIPE,
-                                                    stderr=subprocess.PIPE,
-                                                    text=True)
-                        except subprocess.CalledProcessError as e:
-                            print(f"Compilation ERROR for {arch}: {e}")
-                            if e.stderr:
-                                print(f"STDERR: {e.stderr}")
-                            return
-
-                    # Link architecture-specific library
-                    link_cmd = [
-                        compiler,
-                        '-shared',
-                        '-dynamiclib',
-                        '-o', arch_output,
-                        *arch_obj_files,
-                        *base_flags,
-                        *arch_flags,
-                        '-Wl,-install_name,@rpath/tinyveclib.dylib'
-                    ]
-
-                    print(f"Linking {arch} library: {' '.join(link_cmd)}")
-
-                    try:
-                        subprocess.run(link_cmd, check=True,
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        print(f"Created {arch} library: {arch_output}")
-                    except subprocess.CalledProcessError as e:
-                        print(f"Linking ERROR for {arch}: {e}")
-                        if e.stderr:
-                            print(f"STDERR: {e.stderr}")
-                        return
-
-                # Create universal binary using lipo
-                lib_name = "tinyveclib.dylib"
-                output_path = os.path.join(output_dir, lib_name)
-                lipo_cmd = ['lipo', '-create',
-                            '-output', output_path, *temp_libs]
-
-                print(f"\nCreating universal binary: {' '.join(lipo_cmd)}")
+                # Try with clang as fallback on macOS
+                compiler = 'clang'
                 try:
-                    subprocess.run(lipo_cmd, check=True)
-                    print(f"Created universal binary: {output_path}")
-
-                    # Clean up temporary architecture-specific libraries
-                    for temp_lib in temp_libs:
-                        os.remove(temp_lib)
-
-                    # Clean up object directories
-                    for arch in arch_targets:
-                        obj_dir = f'obj_{arch}'
-                        shutil.rmtree(obj_dir, ignore_errors=True)
-
-                except subprocess.CalledProcessError as e:
-                    print(f"Error creating universal binary: {e}")
+                    subprocess.run(
+                        [compiler, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                    print(f"Using {compiler} instead")
+                except (subprocess.SubprocessError, FileNotFoundError):
+                    print(f"ERROR: Neither gcc nor clang found in PATH")
+                    print("Consider installing GCC with: brew install gcc")
                     return
-            else:
-                # Single architecture build based on current machine
-                if is_arm:
-                    # ARM Mac (Apple Silicon)
-                    print("Building for ARM64 architecture only")
-                    compile_flags = [
-                        flag for flag in compile_flags if not flag.startswith('-mavx')]
-                    compile_flags.extend(['-mfpu=neon', '-arch', 'arm64'])
-                else:
-                    # Intel Mac
-                    print("Building for x86_64 architecture only")
-                    compile_flags.extend(['-arch', 'x86_64'])
 
-                lib_name = "tinyveclib.dylib"
+            # Check architecture and set appropriate flags
+            is_arm = platform.machine().startswith('arm')
+            if is_arm:
+                # ARM Mac (Apple Silicon)
+                print("Building for ARM64 architecture")
+                compile_flags.extend(['-arch', 'arm64'])
+            else:
+                # Intel Mac
+                print("Building for x86_64 architecture")
+                compile_flags.extend([
+                    '-mavx',
+                    '-mavx2',
+                    '-mfma',
+                    '-arch', 'x86_64'
+                ])
+
+            lib_name = "tinyveclib.dylib"
         else:
             # Linux or other Unix
             compiler = 'gcc'
             print("\nUsing GCC on Linux/Unix with AVX support")
+
+            # Add AVX instructions for Linux
+            compile_flags.extend([
+                '-mavx',        # Enable AVX instructions
+                '-mavx2',       # Enable AVX2 instructions
+                '-mfma'         # Enable FMA instructions (often used with AVX)
+            ])
 
             # Check if GCC is available
             try:
@@ -358,15 +267,16 @@ class CustomBuildExt(build_ext):
 
         print("\nCustomBuildExt completed")
 
-        dummy_c_path = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), "src", "dummy.c")
+        # Still need to create dummy.c for setuptools to use as a placeholder extension
+        # dummy_c_path = os.path.join(os.path.dirname(
+        #     os.path.abspath(__file__)), "src", "dummy.c")
 
-        os.makedirs(os.path.dirname(dummy_c_path), exist_ok=True)
-        if not os.path.exists(dummy_c_path):
-            with open(dummy_c_path, "w") as f:
-                f.write("/* Dummy file for extension */\n")
-                f.write(
-                    "PyMODINIT_FUNC PyInit__dummy(void) { return NULL; }\n")
+        # os.makedirs(os.path.dirname(dummy_c_path), exist_ok=True)
+        # if not os.path.exists(dummy_c_path):
+        #     with open(dummy_c_path, "w") as f:
+        #         f.write("/* Dummy file for extension */\n")
+        #         f.write(
+        #             "PyMODINIT_FUNC PyInit__dummy(void) { return NULL; }\n")
 
 
 # Custom sdist to ensure the shared library is included in the source distribution
@@ -400,18 +310,10 @@ def get_package_data_files():
     return data_files
 
 
-dummy_extension = Extension(
-    "tinyvec._dummy",
-    sources=["src/dummy.c"],  # Create this empty file
-    optional=True  # Makes it not required to build
-)
-
 setup(
     name="tinyvec",
     version="0.1.0",
     description="A tiny vector database",
-    author="Your Name",
-    author_email="your.email@example.com",
     cmdclass={
         'build_ext': CustomBuildExt,
         'sdist': CustomSdist,
