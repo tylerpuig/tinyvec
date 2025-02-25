@@ -22,16 +22,6 @@ describe("TinyVecClient Insert", () => {
     client = TinyVecClient.connect(dbPath, { dimensions: 128 });
   });
 
-  afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    try {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
-  });
-
   test("should insert a single vector successfully", async () => {
     const insertion: TinyVecInsertion = {
       vector: generateRandomVector(128),

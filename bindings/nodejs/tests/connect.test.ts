@@ -14,42 +14,12 @@ describe("TinyVecClient Connect", () => {
     await fs.mkdir("temp").catch(() => {});
 
     // Create a temporary directory for each test inside 'temp'
-    tempDir = path.join("temp", `test-${Date.now()}`);
+    const randInt = Math.floor(Math.random() * 1000000);
+    tempDir = path.join("temp", `test-${randInt}`);
     await fs.mkdir(tempDir);
 
     dbPath = path.join(tempDir, "test.db");
     client = null;
-  });
-
-  afterEach(async () => {
-    // Add delay to ensure all file operations are complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    try {
-      // Clean up the temporary directory and all files after each test
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch (error) {
-      // console.warn("Cleanup failed:", error);
-      // If immediate cleanup fails, retry after a delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
-  });
-
-  afterAll(async () => {
-    // Add delay to ensure all file operations are complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    try {
-      // Clean up the entire temp directory after all tests complete
-      await fs.rm("temp", { recursive: true, force: true });
-    } catch (error) {
-      // If immediate cleanup fails, retry after a delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await fs.rm("temp", { recursive: true, force: true }).catch(() => {
-        console.warn("Failed to clean up temp directory:", error);
-      });
-    }
   });
 
   const checkFilesExist = async (basePath: string) => {
@@ -108,9 +78,10 @@ describe("TinyVecClient Connect", () => {
   });
 
   test("should handle missing dimensions in config", async () => {
-    client = TinyVecClient.connect(dbPath);
+    const newDbPath = dbPath + Date.now();
+    const newClient = TinyVecClient.connect(newDbPath);
 
-    const header = await readInitialHeader(dbPath);
+    const header = await readInitialHeader(newDbPath);
     expect(header.vectorCount).toBe(0);
     expect(header.dimensions).toBe(0);
   });

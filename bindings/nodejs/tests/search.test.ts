@@ -64,16 +64,6 @@ describe("TinyVecClient Search", () => {
     client = TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
   });
 
-  afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    try {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
-  });
-
   test("should find exact matches", async () => {
     const insertions = await insertTestVectors();
 
