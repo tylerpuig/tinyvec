@@ -14,6 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         include:
           - os: ubuntu-latest
           - os: windows-latest
@@ -28,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       # Install dependencies
       - name: Install dependencies
@@ -62,7 +63,7 @@ jobs:
         run: python setup.py build_ext
 
       # Use build to create both wheel and sdist
-      - name: Build package
+      - name: Build package on ${{ matrix.os }} ${{ matrix.arch || '' }} Python ${{ matrix.python-version }}
         working-directory: ./bindings/python
         run: python -m build
 
