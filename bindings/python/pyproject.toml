@@ -1,7 +1,18 @@
 [project]
 name = "tinyvec"
+keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
 version = "0.1.0"
 description = "Tiny vector database"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+license = {text = "MIT"}
 authors = [
     {name = "tylerpuig"}
 ]
@@ -15,7 +26,6 @@ dependencies = [
 requires = ["setuptools>=75.8.0", "wheel>=0.45.1"]
 build-backend = "setuptools.build_meta"
 
-
 [tool.setuptools]
 packages = ["tinyvec", "tinyvec.core"]
 package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
@@ -28,3 +38,6 @@ dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.3"
 ]
+
+[project.urls]
+Homepage = "https://github.com/tylerpuig/tinyvec"

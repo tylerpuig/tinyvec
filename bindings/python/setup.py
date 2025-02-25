@@ -1,4 +1,4 @@
-from setuptools import setup, Extension, find_packages
+from setuptools import setup, find_packages
 from setuptools.command.build_ext import build_ext
 from setuptools.command.install import install
 from setuptools.command.bdist_egg import bdist_egg
@@ -8,9 +8,7 @@ from wheel.bdist_wheel import bdist_wheel
 import subprocess
 import platform
 import os
-import sys
-import shutil
-from pathlib import Path
+
 
 IS_MACOS = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
@@ -56,14 +54,14 @@ class CustomBuildExt(build_ext):
         # Determine compiler and platform-specific settings
         if IS_WINDOWS:
             # Use mingw32 on Windows
-            compiler = 'gcc'  # or 'x86_64-w64-mingw32-gcc' if using specific mingw
+            compiler = 'gcc'
             print("\nUsing MinGW GCC on Windows with AVX support")
 
             # Add AVX instructions for Windows
             compile_flags.extend([
                 '-mavx',        # Enable AVX instructions
                 '-mavx2',       # Enable AVX2 instructions
-                '-mfma'         # Enable FMA instructions (often used with AVX)
+                '-mfma'         # Enable FMA instructions
             ])
 
             # Check if GCC is available
@@ -79,7 +77,7 @@ class CustomBuildExt(build_ext):
             lib_name = "tinyveclib.dll"
 
         elif IS_MACOS:
-            compiler = 'gcc'  # or use 'clang' if preferred
+            compiler = 'gcc'
             print("\nUsing GCC on macOS")
 
             # Check if GCC is available
@@ -125,7 +123,7 @@ class CustomBuildExt(build_ext):
             compile_flags.extend([
                 '-mavx',        # Enable AVX instructions
                 '-mavx2',       # Enable AVX2 instructions
-                '-mfma'         # Enable FMA instructions (often used with AVX)
+                '-mfma'         # Enable FMA instructions
             ])
 
             # Check if GCC is available
@@ -230,12 +228,6 @@ class CustomBuildExt(build_ext):
             if os.path.exists(output_path):
                 print(f"SUCCESS: Created shared library: {output_path}")
                 print(f"Library size: {os.path.getsize(output_path)} bytes")
-
-                # Create a manifest file to ensure package data is included
-                manifest_dir = os.path.join(setup_dir, "MANIFEST.in")
-                with open(manifest_dir, "w") as f:
-                    f.write(f"include src/tinyvec/core/{lib_name}\n")
-                print(f"Created MANIFEST.in file")
             else:
                 print(f"ERROR: Failed to create shared library: {output_path}")
                 return
@@ -267,37 +259,63 @@ class CustomBuildExt(build_ext):
 
         print("\nCustomBuildExt completed")
 
-        # Still need to create dummy.c for setuptools to use as a placeholder extension
-        # dummy_c_path = os.path.join(os.path.dirname(
-        #     os.path.abspath(__file__)), "src", "dummy.c")
-
-        # os.makedirs(os.path.dirname(dummy_c_path), exist_ok=True)
-        # if not os.path.exists(dummy_c_path):
-        #     with open(dummy_c_path, "w") as f:
-        #         f.write("/* Dummy file for extension */\n")
-        #         f.write(
-        #             "PyMODINIT_FUNC PyInit__dummy(void) { return NULL; }\n")
-
 
 # Custom sdist to ensure the shared library is included in the source distribution
 class CustomSdist(sdist):
     def run(self):
-        self.run_command('build_ext')
+        # Create a comprehensive MANIFEST.in file
+        setup_dir = os.path.dirname(os.path.abspath(__file__))
+        manifest_dir = os.path.join(setup_dir, "MANIFEST.in")
+
+        with open(manifest_dir, "w") as f:
+            # C source files
+            f.write("recursive-include src/core/src *.c *.h\n")
+            f.write("recursive-include src/core/include *.h\n")
+
+            # Build scripts / configuration files
+            f.write("include setup.py\n")
+            f.write("include README*\n")
+            f.write("include LICENSE*\n")
+
+            # Don't include compiled binary files in source dist
+            f.write("exclude src/tinyvec/core/*.dll\n")
+            f.write("exclude src/tinyvec/core/*.so\n")
+            f.write("exclude src/tinyvec/core/*.dylib\n")
+
+        print(f"Created comprehensive MANIFEST.in file for source distribution")
+
         super().run()
 
-
 # Custom wheel to ensure the shared library is included in the wheel
+
+
 class CustomBdistWheel(bdist_wheel):
     def run(self):
         self.run_command('build_ext')
         super().run()
 
+    def finalize_options(self):
+        super().finalize_options()
+        # Mark the wheel as platform-specific
+        self.root_is_pure = False
+
+    def get_tag(self):
+        # Override the tag generation to ensure platform tag is included
+        python, abi, plat = super().get_tag()
+
+        # For macOS, specify whether it's a universal2 build
+        if IS_MACOS and os.environ.get('MACOS_UNIVERSAL', 'false').lower() == 'true':
+            plat = 'macosx_10_9_universal2'
+
+        return python, abi, plat
 
 # Get package data files
+
+
 def get_package_data_files():
     data_files = []
 
-    # Add the shared library files based on platform
+    # Add shared library files based on platform
     if IS_WINDOWS:
         data_files.append(
             ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dll']))
@@ -323,6 +341,7 @@ setup(
     packages=find_packages(where="src"),
     package_data={
         "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
+        "": ["core/src/*.c", "core/src/*.h", "core/include/*.h"],
     },
     data_files=get_package_data_files(),
     include_package_data=True,
