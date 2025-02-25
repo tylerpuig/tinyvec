@@ -15,8 +15,10 @@ dependencies = [
 requires = ["setuptools>=75.8.0", "wheel>=0.45.1"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.package-data]
-"tinyvec.core" = ["*.dll", "*.so", "*.dylib", "tinyveclib.dll"]
+
+[tool.setuptools]
+packages = ["tinyvec", "tinyvec.core"]
+package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
 
 [tool.setuptools.exclude-package-data]
 "*" = ["tests", "*.tests", "*.tests.*"]
