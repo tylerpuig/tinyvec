@@ -336,7 +336,7 @@ def get_package_data_files():
 
 
 setup(
-    name="tinyvec",
+    name="tinyvec-py",
     version="0.1.0",
     description="A tiny vector database",
     cmdclass={

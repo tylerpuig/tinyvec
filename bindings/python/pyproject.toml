@@ -1,5 +1,5 @@
 [project]
-name = "tinyvec"
+name = "tinyvec-py"
 keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
 version = "0.1.0"
 description = "Tiny vector database"
