@@ -33,8 +33,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         include:
+          # Add 3.13 for non-Windows
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.13"
           # Add macOS ARM builds
           - os: macos-latest
             python-version: "3.9"
@@ -67,15 +72,16 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.2
         env:
-          CIBW_BUILD: "cp${{ matrix.python-version == '3.13' && '313' || matrix.python-version == '3.12' && '312' || matrix.python-version == '3.11' && '311' || matrix.python-version == '3.10' && '310' || '39' }}*"
-          # Skip PyPy builds
-          CIBW_SKIP: "pp* *-musllinux_*"
-          # Configure special macOS settings
+          CIBW_BEFORE_BUILD_LINUX: "pip install numpy && yum install -y gcc gcc-c++"
+          # Be explicit about Python version and architecture
+          CIBW_BUILD: "cp${{ matrix.python-version == '3.9' && '39' || matrix.python-version == '3.10' && '310' || matrix.python-version == '3.11' && '311' || matrix.python-version == '3.12' && '312' || '39' }}-*"
+          # Skip Python 3.13 for now
+          CIBW_SKIP: "pp* *-musllinux_* cp313-*"
+          # Explicitly set architectures
           CIBW_ARCHS_MACOS: "${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}"
-          CIBW_BEFORE_BUILD: "pip install numpy"
-          CIBW_ENVIRONMENT: "${{ runner.os == 'macOS' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.arch == 'arm64' && '11.0' || '10.9') || '' }}"
-        with:
-          package-dir: ./bindings/python
+          CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_ARCHS_WINDOWS: "AMD64"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel show {wheel} && auditwheel repair -w {dest_dir} {wheel}"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
