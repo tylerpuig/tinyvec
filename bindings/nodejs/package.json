@@ -17,7 +17,8 @@
     "src",
     "dist",
     "binding.gyp",
-    "prebuilds"
+    "prebuilds",
+    "README.md"
   ],
   "scripts": {
     "test": "jest",
@@ -25,10 +26,19 @@
     "build:dev": "tsx scripts/transferCore.ts && prebuildify --napi --strip",
     "install": "node-gyp-build",
     "prebuildify": "prebuildify --napi --strip",
-    "prebuildify-all": "prebuildify --napi --strip --all",
-    "prepare": "npm run build"
+    "prebuildify-all": "prebuildify --napi --strip --all"
   },
-  "keywords": [],
+  "keywords": [
+    "tinyvec",
+    "vector",
+    "database",
+    "similarity",
+    "search",
+    "vector database",
+    "vector search",
+    "similarity search",
+    "embedded vector database"
+  ],
   "author": "tylerpuig",
   "license": "MIT",
   "devDependencies": {

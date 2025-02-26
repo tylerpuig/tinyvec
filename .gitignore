@@ -58,3 +58,4 @@ Thumbs.db
 *.db
 *.tgz
 *.in
+/bindings/nodejs/prebuilds/

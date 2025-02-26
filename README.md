@@ -183,7 +183,7 @@ if __name__ == "__main__":
 ## Vector Input Formats
 
 - **Python**: Both NumPy arrays and Python lists are accepted, but all vectors are converted to NumPy float32 arrays before insertion for optimal performance.
-- **NodeJS**: Regular arrays and TypedArrays (Float32Array, etc.) are accepted, but all vectors are converted to Float32Array before insertion.
+- **Node.js**: Regular arrays and TypedArrays (Float32Array, etc.) are accepted, but all vectors are converted to Float32Array before insertion.
 
 ## Metadata Flexibility
 
