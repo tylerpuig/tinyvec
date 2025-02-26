@@ -16,13 +16,16 @@
   "files": [
     "src",
     "dist",
-    "binding.gyp"
+    "binding.gyp",
+    "prebuilds"
   ],
   "scripts": {
     "test": "jest",
     "build": "tsc -p tsconfig.build.json",
-    "build:dev": "tsx scripts/transferCore.ts && node-gyp rebuild",
-    "install": "node-gyp rebuild",
+    "build:dev": "tsx scripts/transferCore.ts && prebuildify --napi --strip",
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip",
+    "prebuildify-all": "prebuildify --napi --strip --all",
     "prepare": "npm run build"
   },
   "keywords": [],
@@ -31,13 +34,15 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.5",
+    "prebuildify": "^6.0.1",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
     "node-addon-api": "^8.3.0",
-    "node-gyp": "^11.1.0"
+    "node-gyp": "^11.1.0",
+    "node-gyp-build": "^4.8.4"
   },
   "gypfile": true
 }

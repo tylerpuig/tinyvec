@@ -1,14 +1,21 @@
-import {
-  search as nativeSearch,
-  insertVectors as nativeInsert,
-  connect as nativeConnect,
-  getIndexStats as nativeGetIndexStats,
-  updateDbFileConnection as nativeUpdateDbFileConnection,
-} from "../build/Release/tinyvec.node";
+import path from "path";
 import * as tinyvecUtils from "./utils";
 import * as tinyvecTypes from "./types";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
+
+const gyp = require("node-gyp-build");
+const nativeModule = gyp(path.resolve(__dirname, ".."));
+
+const nativeSearch = nativeModule.search as tinyvecTypes.NativeSearchFunction;
+const nativeInsert =
+  nativeModule.insertVectors as tinyvecTypes.NativeInsertFunction;
+const nativeConnect =
+  nativeModule.connect as tinyvecTypes.NativeConnectFunction;
+const nativeGetIndexStats =
+  nativeModule.getIndexStats as tinyvecTypes.NativeGetIndexStatsFunction;
+const nativeUpdateDbFileConnection =
+  nativeModule.updateDbFileConnection as tinyvecTypes.NativeUpdateDbFileConnectionFunction;
 
 class TinyVecClient {
   private filePath: string;
@@ -169,4 +176,11 @@ class TinyVecClient {
 }
 
 export { TinyVecClient };
-export * from "./types";
+// export * from "./types";
+export type {
+  TinyVecInsertion,
+  TinyVecSearchResult,
+  IndexFileStats,
+  TinyVecConfig,
+  JsonValue,
+} from "./types";

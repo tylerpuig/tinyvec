@@ -1,6 +1,32 @@
+// Native addon function types
+export type NativeSearchFunction = <TMeta = any>(
+  query: Float32Array,
+  topK: number,
+  filePath: string
+) => Promise<TinyVecSearchResult<TMeta>[]>;
+
+export type NativeInsertFunction = (
+  filePath: string,
+  vectors: TinyVecInsertion[],
+  dimensions: number
+) => Promise<number>;
+
+export type NativeConnectFunction = (
+  filePath: string,
+  config?: TinyVecConfig
+) => { filePath: string };
+
+export type NativeGetIndexStatsFunction = (
+  filePath: string
+) => Promise<IndexFileStats>;
+
+export type NativeUpdateDbFileConnectionFunction = (
+  filePath: string
+) => boolean;
+
 export type TinyVecSearchResult<TMeta = any> = {
   index: number;
-  score: number;
+  similarity: number;
   metadata: TMeta;
 };
 
