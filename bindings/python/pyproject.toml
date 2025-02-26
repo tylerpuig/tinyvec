@@ -1,7 +1,7 @@
 [project]
 name = "tinyvec-py"
 keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
-version = "0.1.0"
+version = "0.1.1"
 description = "Tiny vector database"
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -22,8 +22,10 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.9"
+
 dependencies = [
-     "numpy",
+     "numpy>=1.20.0",
+     "typing_extensions>=4.0.0",
 ]
 
 [build-system]

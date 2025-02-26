@@ -1,4 +1,4 @@
-name: Build Python Package
+name: Build Packages Windows
 
 on:
   push:
@@ -9,47 +9,13 @@ on:
 
 jobs:
   build_package:
-    name: Build package on ${{ matrix.os }} ${{ matrix.arch || '' }}
+    name: Build package on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9"]
         os: [windows-latest]
-        arch: [""]
-        include:
-          # macOS Intel builds
-          - os: macos-latest
-            python-version: "3.9"
-            arch: x86_64
-          - os: macos-latest
-            python-version: "3.10"
-            arch: x86_64
-          - os: macos-latest
-            python-version: "3.11"
-            arch: x86_64
-          - os: macos-latest
-            python-version: "3.12"
-            arch: x86_64
-          - os: macos-latest
-            python-version: "3.13"
-            arch: x86_64
-          # Add macOS ARM builds
-          - os: macos-latest
-            python-version: "3.9"
-            arch: arm64
-          - os: macos-latest
-            python-version: "3.10"
-            arch: arm64
-          - os: macos-latest
-            python-version: "3.11"
-            arch: arm64
-          - os: macos-latest
-            python-version: "3.12"
-            arch: arm64
-          - os: macos-latest
-            python-version: "3.13"
-            arch: arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -65,33 +31,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy build setuptools wheel
 
-      # Set up system dependencies for Linux
-      - name: Set up system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc g++ make
-
-      # Configure macOS architecture-specific environment
-      - name: Configure macOS architecture
-        if: runner.os == 'macOS'
-        run: |
-          # Set architecture-specific environment variables
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
-            echo "ARCHFLAGS=-arch arm64" >> $GITHUB_ENV
-          else
-            echo "MACOSX_DEPLOYMENT_TARGET=10.9" >> $GITHUB_ENV
-            echo "ARCHFLAGS=-arch x86_64" >> $GITHUB_ENV
-          fi
-
       # Build extension modules first
       - name: Build extensions
         working-directory: ./bindings/python
         run: python setup.py build_ext
 
       # Use build to create both wheel and sdist
-      - name: Build package on ${{ matrix.os }} ${{ matrix.arch || '' }} Python ${{ matrix.python-version }}
+      - name: Build package on ${{ matrix.os }} Python ${{ matrix.python-version }}
         working-directory: ./bindings/python
         run: python -m build
 
@@ -99,7 +45,7 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: tinyvec-${{ matrix.os }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}-py${{ matrix.python-version }}
+          name: tinyvec-${{ matrix.os }}-py${{ matrix.python-version }}
           path: ./bindings/python/dist/*
           retention-days: 14
   combine_artifacts:

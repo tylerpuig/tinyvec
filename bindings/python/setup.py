@@ -300,25 +300,16 @@ class CustomBdistWheel(bdist_wheel):
         self.root_is_pure = False
 
     def get_tag(self):
-        # Override the tag generation to ensure platform tag is included
+        # Override the tag generation
         python, abi, plat = super().get_tag()
 
-        # For macOS, handle architecture-specific builds
-        if IS_MACOS:
-            archflags = os.environ.get('ARCHFLAGS', '')
-            if 'arm64' in archflags:
-                plat = 'macosx_11_0_arm64'
-            elif 'x86_64' in archflags:
-                plat = 'macosx_10_9_x86_64'
-            # Only use universal2 if explicitly requested
-            elif os.environ.get('MACOS_UNIVERSAL', 'false').lower() == 'true':
-                plat = 'macosx_11_0_universal2'
-        elif platform.system() == "Linux":
-            plat = 'manylinux2014_x86_64'  # This is compatible with most Linux distros
+        # Keep the platform tag for Windows but set Python and ABI tags to 'any'
+        if IS_WINDOWS:
+            python = 'py3'
+            abi = 'none'
+            # plat remains the same (win_amd64 or win32)
 
         return python, abi, plat
-
-# Get package data files
 
 
 def get_package_data_files():
@@ -339,7 +330,7 @@ def get_package_data_files():
 
 setup(
     name="tinyvec-py",
-    version="0.1.0",
+    version="0.1.1",
     description="A tiny vector database",
     cmdclass={
         'build_ext': CustomBuildExt,

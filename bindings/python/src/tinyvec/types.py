@@ -1,6 +1,5 @@
-from typing import Union, Sequence, TypeAlias
+from typing import Union, Sequence
+from typing_extensions import TypeAlias
 import numpy as np
-import numpy.typing as npt
 
-VectorInput: TypeAlias = Union[npt.NDArray[np.float32],
-                               Sequence[float], Sequence[int]]
+VectorInput: TypeAlias = Union[np.ndarray, Sequence[float], Sequence[int]]
