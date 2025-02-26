@@ -330,7 +330,7 @@ def get_package_data_files():
 
 setup(
     name="tinyvec-py",
-    version="0.1.1",
+    version="0.1.2",
     description="A tiny vector database",
     cmdclass={
         'build_ext': CustomBuildExt,

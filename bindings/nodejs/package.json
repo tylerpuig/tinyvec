@@ -1,7 +1,7 @@
 {
   "name": "tinyvec",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.1.2",
+  "description": "TinyVec is a lightweight, embedded vector database for similarity search with native performance",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -53,6 +53,10 @@
     "node-addon-api": "^8.3.0",
     "node-gyp": "^11.1.0",
     "node-gyp-build": "^4.8.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tylerpuig/tinyvec.git"
   },
   "gypfile": true
 }

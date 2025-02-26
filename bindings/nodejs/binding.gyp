@@ -52,14 +52,14 @@
         "msvs_settings": {
             "VCCLCompilerTool": {
                 "ExceptionHandling": 1,
-                "AdditionalOptions": ["/EHsc", "/std:c++14"]
+                "AdditionalOptions": ["/EHsc", "/std:c++20"]
             }
         },
         "xcode_settings": {
             "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
             "CLANG_CXX_LIBRARY": "libc++",
             "MACOSX_DEPLOYMENT_TARGET": "10.7",
-            "OTHER_CPLUSPLUSFLAGS": ["-std=c++14"]
+            "OTHER_CPLUSPLUSFLAGS": ["-std=c++20"]
         },
         "defines": [
             "NAPI_DISABLE_CPP_EXCEPTIONS"

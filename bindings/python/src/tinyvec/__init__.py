@@ -2,7 +2,7 @@
 Tinyvec - A tiny vector database for Python
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from .client import TinyVecClient
 from .models import TinyVecConfig, TinyVecResult, TinyVecInsertion, TinyVecIndexStats
