@@ -4,20 +4,31 @@
         "cflags!": ["-fno-exceptions"],
         # "cflags_cc!": [ "-fno-exceptions" ],
         "conditions": [
-            ['OS=="mac"', {
+            ['OS=="mac" and target_arch=="arm64"', {
                 "cflags": [
                     "-mfpu=neon",
-                    "-O3",
-                    "-mtune=native"
+                    "-O3"
                 ],
                 "cflags_cc": [
                     "-mfpu=neon",
                     "-O3",
-                    "-mtune=native",
                     "-masm=darwin"
                 ],
-                "include_dirs": [
-                    "../../src/core/include",
+                "xcode_settings": {
+                    "MACOSX_DEPLOYMENT_TARGET": "10.15"
+                }
+            }],
+            ['OS=="mac" and target_arch=="x64"', {
+                "cflags": [
+                    "-mavx",
+                    "-mavx2",
+                    "-O3"
+                ],
+                "cflags_cc": [
+                    "-mavx",
+                    "-mavx2",
+                    "-O3",
+                    "-masm=darwin"
                 ],
                 "xcode_settings": {
                     "MACOSX_DEPLOYMENT_TARGET": "10.15"
