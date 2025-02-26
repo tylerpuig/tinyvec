@@ -313,6 +313,8 @@ class CustomBdistWheel(bdist_wheel):
             # Only use universal2 if explicitly requested
             elif os.environ.get('MACOS_UNIVERSAL', 'false').lower() == 'true':
                 plat = 'macosx_11_0_universal2'
+        elif platform.system() == "Linux":
+            plat = 'manylinux2014_x86_64'  # This is compatible with most Linux distros
 
         return python, abi, plat
 
@@ -348,9 +350,12 @@ setup(
     packages=find_packages(where="src"),
     package_data={
         "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
-        "": ["core/src/*.c", "core/src/*.h", "core/include/*.h"],
     },
-    data_files=get_package_data_files(),
+    # package_data={
+    #     "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
+    #     "": ["core/src/*.c", "core/src/*.h", "core/include/*.h"],
+    # },
+    # data_files=get_package_data_files(),
     include_package_data=True,
     zip_safe=False,
 )
