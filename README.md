@@ -94,17 +94,17 @@ async function main() {
     [
       {
         index: 8,
-        score: 0.801587700843811,
+        similarity: 0.801587700843811,
         metadata: { id: 8 }
       },
       {
         index: 16,
-        score: 0.7834401726722717,
+        similarity: 0.7834401726722717,
         metadata: { id: 16 }
       },
       {
         index: 5,
-        score: 0.7815409898757935,
+        similarity: 0.7815409898757935,
         metadata: { id: 5 }
       },
       ...

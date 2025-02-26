@@ -160,7 +160,7 @@ describe("TinyVecClient Search", () => {
     expect(results[0].metadata.id).toBe(2);
 
     // Check scores are in descending order (higher is more similar)
-    const scores = results.map((r) => r.score);
+    const scores = results.map((r) => r.similarity);
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
   });
 

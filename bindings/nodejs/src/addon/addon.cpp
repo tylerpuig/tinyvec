@@ -15,7 +15,7 @@ namespace
     struct SearchResult
     {
         int index;
-        float score;
+        float similarity;
         MetadataBytes metadata;
     };
     struct AsyncSearchData
@@ -119,7 +119,7 @@ namespace
             status = napi_create_int32(env, searchData->results[i].index, &index);
             if (status != napi_ok)
                 break;
-            status = napi_create_double(env, searchData->results[i].score, &score);
+            status = napi_create_double(env, searchData->results[i].similarity, &score);
             if (status != napi_ok)
                 break;
 
@@ -134,7 +134,7 @@ namespace
             status = napi_set_named_property(env, resultObj, "index", index);
             if (status != napi_ok)
                 break;
-            status = napi_set_named_property(env, resultObj, "score", score);
+            status = napi_set_named_property(env, resultObj, "similarity", score);
             if (status != napi_ok)
                 break;
 
