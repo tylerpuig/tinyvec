@@ -32,7 +32,7 @@ npm install tinyvecdb
 ### Python
 
 ```bash
-pip install tinyvec-py
+pip install tinyvecdb
 ```
 
 ## 📝 Quick Start
