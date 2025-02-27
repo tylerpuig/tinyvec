@@ -59,3 +59,5 @@ Thumbs.db
 *.tgz
 *.in
 /bindings/nodejs/prebuilds/
+/benchmarks/python/benchmarks/db-files/
+/benchmarks/python/benchmarks/metrics.json
