@@ -1,8 +1,8 @@
-# TinyVec
+# TinyVecDB
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A lightweight, embedded vector database focused on simplicity and speed. TinyVec provides vector storage and similarity search without the complexity of client-server architectures.
+A lightweight, embedded vector database focused on simplicity and speed. TinyVecDB provides vector storage and similarity search without the complexity of client-server architectures.
 
 ## 🚀 Features
 
@@ -26,7 +26,7 @@ A lightweight, embedded vector database focused on simplicity and speed. TinyVec
 ### JavaScript/TypeScript
 
 ```bash
-npm install tinyvec
+npm install tinyvecdb
 ```
 
 ### Python
@@ -44,7 +44,7 @@ import {
   TinyVecClient,
   type TinyVecInsertion,
   type TinyVecConfig,
-} from "tinyvec";
+} from "tinyvecdb";
 
 async function main() {
   try {
@@ -193,9 +193,9 @@ if __name__ == "__main__":
 
 ## Database Initialization
 
-- **Automatic file creation**: TinyVec automatically creates all necessary storage files when connecting if they don't exist.
-- **Dynamic dimension detection**: If `dimensions` is not specified in the configuration, TinyVec will automatically use the length of the first inserted vector to update the database.
-- **Flexible configuration**: The config object is optional. When omitted, TinyVec will determine appropriate settings based on your first vector insertion while ensuring consistency for subsequent operations.
+- **Automatic file creation**: TinyVecDB automatically creates all necessary storage files when connecting if they don't exist.
+- **Dynamic dimension detection**: If `dimensions` is not specified in the configuration, TinyVecDB will automatically use the length of the first inserted vector to update the database.
+- **Flexible configuration**: The config object is optional. When omitted, TinyVecDB will determine appropriate settings based on your first vector insertion while ensuring consistency for subsequent operations.
 
 ## 📚 Language Bindings
 
@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
 ## 🧪 Performance
 
-TinyVec is optimized for performance on resource-constrained devices:
+TinyVecDB is optimized for performance on resource-constrained devices:
 
 - **C Core Engine**: Built with a native C core for maximum efficiency
 - Minimal memory footprint

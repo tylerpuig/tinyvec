@@ -312,26 +312,26 @@ class CustomBdistWheel(bdist_wheel):
         return python, abi, plat
 
 
-def get_package_data_files():
-    data_files = []
+# def get_package_data_files():
+#     data_files = []
 
-    # Add shared library files based on platform
-    if IS_WINDOWS:
-        data_files.append(
-            ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dll']))
-    elif IS_MACOS:
-        data_files.append(
-            ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dylib']))
-    else:
-        data_files.append(('tinyvec/core', ['src/tinyvec/core/tinyveclib.so']))
+#     # Add shared library files based on platform
+#     if IS_WINDOWS:
+#         data_files.append(
+#             ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dll']))
+#     elif IS_MACOS:
+#         data_files.append(
+#             ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dylib']))
+#     else:
+#         data_files.append(('tinyvec/core', ['src/tinyvec/core/tinyveclib.so']))
 
-    return data_files
+#     return data_files
 
 
 setup(
-    name="tinyvec-py",
+    name="tinyvecdb",
     version="0.1.2",
-    description="A tiny vector database",
+    description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,
         'sdist': CustomSdist,
@@ -342,11 +342,6 @@ setup(
     package_data={
         "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
     },
-    # package_data={
-    #     "tinyvec.core": ["*.dll", "*.so", "*.dylib"],
-    #     "": ["core/src/*.c", "core/src/*.h", "core/include/*.h"],
-    # },
-    # data_files=get_package_data_files(),
     include_package_data=True,
     zip_safe=False,
 )

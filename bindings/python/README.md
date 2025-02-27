@@ -1,6 +1,6 @@
-# TinyVec Python API Documentation
+# TinyVecDB Python API Documentation
 
-This document provides a comprehensive overview of the TinyVec Python API.
+This document provides a comprehensive overview of the TinyVecDB Python API.
 
 ## Table of Contents
 
@@ -13,12 +13,12 @@ This document provides a comprehensive overview of the TinyVec Python API.
 ## Installation
 
 ```bash
-pip install tinyvec
+pip install tinyvecdb
 ```
 
 ## Core Concepts
 
-TinyVec is an embedded vector database that emphasizes speed, low memory usage, and simplicity. The core of TinyVec is written in C, and this library provides a Python binding to that engine. The key concepts are:
+TinyVecDB is an embedded vector database that emphasizes speed, low memory usage, and simplicity. The core of TinyVecDB is written in C, and this library provides a Python binding to that engine. The key concepts are:
 
 - **Embeddings**: Fixed-dimension float vectors (e.g., 512 dimensions)
 - **Metadata**: JSON-serializable data associated with each vector
@@ -82,7 +82,7 @@ The main class you'll interact with is `TinyVecClient`. It provides all methods 
 
 ##### `TinyVecClient()`
 
-Creates a new TinyVec client instance.
+Creates a new TinyVecDB client instance.
 
 **Example:**
 
@@ -92,7 +92,7 @@ client = TinyVecClient()
 
 ##### `connect(path, config)`
 
-Connects to a TinyVec database.
+Connects to a TinyVecDB database.
 
 **Parameters:**
 

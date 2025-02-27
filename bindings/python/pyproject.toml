@@ -1,8 +1,8 @@
 [project]
-name = "tinyvec-py"
+name = "tinyvecdb"
 keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
 version = "0.1.2"
-description = "Tiny vector database"
+description = "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search."
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

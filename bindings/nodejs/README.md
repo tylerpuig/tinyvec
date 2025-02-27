@@ -1,6 +1,6 @@
-# TinyVec Node.js API Documentation
+# TinyVecDB Node.js API Documentation
 
-This document provides a comprehensive overview of the TinyVec Node.js API.
+This document provides a comprehensive overview of the TinyVecDB Node.js API.
 
 ## Table of Contents
 
@@ -13,12 +13,12 @@ This document provides a comprehensive overview of the TinyVec Node.js API.
 ## Installation
 
 ```bash
-npm install tinyvec
+npm install tinyvecdb
 ```
 
 ## Core Concepts
 
-TinyVec is an embedded vector database that emphasizes speed, low memory usage, and simplicity. The core of TinyVec is written in C, and this library provides a Node.js binding to that engine. The key concepts are:
+TinyVecDB is an embedded vector database that emphasizes speed, low memory usage, and simplicity. The core of TinyVecDB is written in C, and this library provides a Node.js binding to that engine. The key concepts are:
 
 - **Embeddings**: Fixed-dimension float vectors (e.g., 512 dimensions)
 - **Metadata**: JSON-serializable data associated with each vector
@@ -27,7 +27,7 @@ TinyVec is an embedded vector database that emphasizes speed, low memory usage, 
 ## Basic Usage
 
 ```typescript
-import { TinyVecClient, type TinyVecInsertion } from "tinyvec";
+import { TinyVecClient, type TinyVecInsertion } from "tinyvecdb";
 
 async function example() {
   // Connect to database (will create the file if it doesn't exist)
@@ -96,7 +96,7 @@ The main class you'll interact with is `TinyVecClient`. It provides all methods 
 
 ##### `TinyVecClient.connect(path, config?)`
 
-Creates and connects to a TinyVec database.
+Creates and connects to a TinyVecDB database.
 
 **Parameters:**
 
