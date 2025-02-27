@@ -1,25 +1,20 @@
-[project]
+[tool.poetry]
 name = "tinyvec-benches"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "tylerpuig"}
-]
+description = "Benchmarks for tinyvec"
+authors = ["tylerpuig"]
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "chromadb (>=0.6.3,<0.7.0)",
-    "psutil (>=7.0.0,<8.0.0)",
-    "lancedb (>=0.20.0,<0.21.0)",
-    "qdrant-client (>=1.13.2,<2.0.0)",
-    "sqlite-vec (>=0.1.6,<0.2.0)",
-    "tinyvecdb (>=0.1.2,<0.2.0)",
-    "pandas (>=2.2.3,<3.0.0)"
-]
+packages = []
 
 [tool.poetry.dependencies]
 python = ">=3.10"
-
+chromadb = ">=0.6.3,<0.7.0"
+psutil = ">=7.0.0,<8.0.0"
+lancedb = ">=0.20.0,<0.21.0"
+qdrant-client = ">=1.13.2,<2.0.0"
+sqlite-vec = ">=0.1.6,<0.2.0"
+tinyvecdb = ">=0.1.2,<0.2.0"
+pandas = ">=2.2.3,<3.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
