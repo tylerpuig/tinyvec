@@ -119,19 +119,16 @@ async def main():
 
     chroma_batch_size = 5_000
 
-    # First batch: items 0 to 4999
-    chroma_collection.add(
-        embeddings=chroma_embeddings[:chroma_batch_size],
-        documents=chroma_docs[:chroma_batch_size],
-        ids=chroma_ids[:chroma_batch_size]
-    )
+    for i in range(0, INSERTION_COUNT, chroma_batch_size):
+        # Handle the last batch correctly
+        end_idx = min(i + chroma_batch_size, INSERTION_COUNT)
 
-    # Second batch: items 5000 to 9999
-    chroma_collection.add(
-        embeddings=chroma_embeddings[chroma_batch_size:],
-        documents=chroma_docs[chroma_batch_size:],
-        ids=chroma_ids[chroma_batch_size:]
-    )
+        # Add the current batch
+        chroma_collection.add(
+            embeddings=chroma_embeddings[i:end_idx],
+            documents=chroma_docs[i:end_idx],
+            ids=chroma_ids[i:end_idx]
+        )
 
     tinyvec_client = TinyVecClient()
     tinyvec_client.connect(TINYVEC_PATH, TinyVecConfig(dimensions=DIMENSIONS))
