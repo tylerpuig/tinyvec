@@ -33,8 +33,8 @@ def main():
     sqlite_vec.load(db)
 
     query_times: List[float] = []
+    random_vector = [random() for _ in range(DIMENSIONS)]
     for i in range(QUERY_ITERATIONS):
-        random_vector = [random() for _ in range(DIMENSIONS)]
         start_time = time.time()
         db.execute(
             """

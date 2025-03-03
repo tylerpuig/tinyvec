@@ -38,11 +38,10 @@ def main():
             limit=TOP_K
         )
 
-    end_time = time.time()
-    search_time = end_time - start_time
-    query_times.append(search_time)
-
-    print(f"\nSearch completed in {search_time * 1000:.2f}ms")
+        end_time = time.time()
+        search_time = end_time - start_time
+        query_times.append(search_time)
+        print(f"\nSearch completed in {search_time * 1000:.2f}ms")
 
     avg_search_time = get_avg_search_time(query_times)
 

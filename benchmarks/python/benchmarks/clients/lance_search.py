@@ -20,14 +20,12 @@ def main():
     init_memory = get_stable_memory_usage()
 
     time.sleep(SLEEP_TIME)
-    # Generate a random query vector
-    query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
     db = lancedb.connect(LANCEDB_PATH)
     table = db.open_table(COLLECTION_NAME)
 
     # Perform search and measure time
-    print("\nPerforming search...")
+    query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
     query_times: List[float] = []
     for _ in range(QUERY_ITERATIONS):

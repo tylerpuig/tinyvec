@@ -20,9 +20,9 @@ def main():
         COLLECTION_NAME, embedding_function=None)
 
     query_times: list[float] = []
+    query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
     for i in range(QUERY_ITERATIONS):
-        query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
         start_query_time = time.time()
         collection.query(query_embeddings=query_vec, n_results=10)
         end_query_time = time.time()
