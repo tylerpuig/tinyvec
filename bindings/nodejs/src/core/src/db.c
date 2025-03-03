@@ -23,6 +23,8 @@
 #include "../include/file.h"
 #include "../include/minheap.h"
 #include "../include/distance.h"
+#include "../include/sqlite3.h"
+#include "../include/vec_types.h"
 
 // Architecture-specific SIMD includes
 #if defined(__x86_64__) || defined(_M_X64)
@@ -103,6 +105,40 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
         return NULL;
     }
 
+    // Path for SQLite database
+    char *sqlite_path = malloc(strlen(file_path) + 9); // +9 for ".metadata.db\0"
+    sprintf(sqlite_path, "%s.metadata.db", file_path);
+    if (!sqlite_path)
+    {
+        free(header_info);
+        free_metadata_file_paths(metadata_paths);
+        fclose(vec_file);
+        return NULL;
+    }
+
+    sqlite3 *db;
+    int rc = sqlite3_open(sqlite_path, &db);
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to open SQLite database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        free_metadata_file_paths(metadata_paths);
+        free(sqlite_path);
+        free(header_info);
+        fclose(vec_file);
+        return NULL;
+    }
+
+    // Set WAL journal mode for better performance
+    char *err_msg = NULL;
+    rc = sqlite3_exec(db, "PRAGMA journal_mode=WAL;", NULL, NULL, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to set WAL mode: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        // Continue anyway, this is not fatal
+    }
+
     // Make a proper copy of the file path
     size_t path_len = strlen(file_path) + 1;
     char *path_copy = (char *)malloc(path_len);
@@ -119,6 +155,8 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     connection->file_path = path_copy;
     connection->dimensions = header_info->dimensions;
     connection->vec_file = vec_file;
+    connection->sqlite_db = db;
+    free(sqlite_path);
 
     add_to_connection_pool(connection);
 
@@ -233,7 +271,8 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
     // Allocate vector buffer
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
-    vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
+    // vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
+    vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 32);
     if (!vec_buffer)
     {
         printf("Failed to allocate vector buffer\n");
@@ -260,7 +299,8 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
     {
         int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
-        size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
+        // size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
+        size_t read = fread(vec_buffer, sizeof(float) * (header_info->dimensions + 1), vectors_to_read, connection->vec_file);
         if (read != vectors_to_read)
         {
 
@@ -269,13 +309,24 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
         for (int j = 0; j < vectors_to_read; j++)
         {
-            float *current_vec = vec_buffer + (j * header_info->dimensions);
+
+            // Get pointer to start of vector+id block
+            // float *vec_block = vec_buffer + (j * header_info->dimensions);
+            float *vec_block = vec_buffer + (j * (header_info->dimensions + 1));
+
+            // Extract metadata ID from first float
+            int metadata_id = (int)vec_block[0];
+
+            // Actual vector data starts after the metadata ID
+            float *current_vec = vec_block + 1;
+            // float *current_vec = vec_buffer + (j * header_info->dimensions);
             PREFETCH((char *)(current_vec + header_info->dimensions));
             float dot = dot_product(query_vec_norm, current_vec, header_info->dimensions);
 
             if (dot > min_heap->data[0] || min_heap->size < top_k)
             {
-                insert(min_heap, dot, vec_count);
+                // insert(min_heap, dot, vec_count);
+                insert(min_heap, dot, metadata_id);
             }
             vec_count++;
         }
@@ -289,63 +340,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         goto cleanup;
     }
 
-    // Get metadata paths
-    md_paths = get_metadata_file_paths(connection->file_path);
-    if (!md_paths)
-    {
-        printf("Failed to get metadata paths\n");
-        goto cleanup;
-    }
-
-    // Open index file
-    idx_file = open_db_file(md_paths->idx_path);
-    if (!idx_file)
-    {
-        printf("Failed to open index file\n");
-        goto cleanup;
-    }
-
-    // Open metadata file
-    md_file = open_db_file(md_paths->md_path);
-    if (!md_file)
-    {
-        printf("Failed to open metadata file\n");
-        goto cleanup;
-    }
-
-    // Get file sizes
-    if (fseek(idx_file, 0, SEEK_END) != 0)
-    {
-        printf("Failed to seek index file\n");
-        goto cleanup;
-    }
-    long idx_size = ftell(idx_file);
-
-    if (fseek(md_file, 0, SEEK_END) != 0)
-    {
-        printf("Failed to seek metadata file\n");
-        goto cleanup;
-    }
-    long md_size = ftell(md_file);
-
-    // Process metadata for each result
-    for (int i = 0; i < min_heap->size; i++)
-    {
-        int offset = sorted[i].index * 12;
-        if (fseek(idx_file, 0, SEEK_SET) != 0 || fseek(md_file, 0, SEEK_SET) != 0)
-        {
-            printf("Failed to reset file positions\n");
-            goto cleanup;
-        }
-
-        MetadataBytes metadata = get_vec_metadata(offset, idx_file, md_file, idx_size, md_size);
-        if (!metadata.data)
-        {
-            // printf("Failed to get metadata for index %d\n", i);
-            continue;
-        }
-        sorted[i].metadata = metadata;
-    }
+    get_metadata_batch(connection->sqlite_db, sorted, min_heap->size);
 
     if (vec_buffer)
         aligned_free(vec_buffer);
@@ -393,11 +388,167 @@ cleanup:
     return NULL;
 }
 
+/**
+ * Retrieves metadata for an array of IDs from the SQLite database
+ *
+ * @param db The SQLite database connection
+ * @param sorted Array of VecResult structures to be populated with metadata
+ * @param count Number of items in the sorted array
+ * @return int Number of successful metadata retrievals, or -1 on error
+ */
+int get_metadata_batch(sqlite3 *db, VecResult *sorted, int count)
+{
+    if (!db || !sorted || count <= 0)
+    {
+        return -1;
+    }
+
+    // Build the SQL query with placeholders for the IN clause
+    char *sql_base = "SELECT id, metadata, metadata_length FROM metadata WHERE id IN (";
+    char *placeholders = NULL;
+    placeholders = malloc((count * 2) + 1); // ", ?" for each item except the first, plus null terminator
+
+    if (!placeholders)
+    {
+        return -1;
+    }
+
+    // Build the placeholders string "?,?,?..."
+    memset(placeholders, 0, (count * 2) + 1);
+    for (int i = 0; i < count; i++)
+    {
+        if (i == 0)
+        {
+            strcat(placeholders, "?");
+        }
+        else
+        {
+            strcat(placeholders, ",?");
+        }
+    }
+
+    // Combine the base SQL with the placeholders and closing parenthesis
+    char *full_sql = malloc(strlen(sql_base) + strlen(placeholders) + 2); // +2 for ")" and null terminator
+    if (!full_sql)
+    {
+        free(placeholders);
+        return -1;
+    }
+
+    sprintf(full_sql, "%s%s)", sql_base, placeholders);
+    free(placeholders);
+
+    // Prepare the statement
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db, full_sql, -1, &stmt, NULL);
+    free(full_sql);
+
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to prepare metadata query: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    // Bind all the IDs to the SQL statement
+    for (int i = 0; i < count; i++)
+    {
+        rc = sqlite3_bind_int(stmt, i + 1, sorted[i].index);
+        if (rc != SQLITE_OK)
+        {
+            printf("Failed to bind parameter %d: %s\n", i + 1, sqlite3_errmsg(db));
+            sqlite3_finalize(stmt);
+            return -1;
+        }
+    }
+
+    // Execute the query and process results
+    int successful_retrievals = 0;
+
+    // Create a lookup map for faster result matching
+    int *id_map = malloc(count * sizeof(int));
+    if (!id_map)
+    {
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    // Initialize map with -1 (not found)
+    for (int i = 0; i < count; i++)
+    {
+        id_map[i] = -1;
+    }
+
+    // Fill the map with index positions
+    for (int i = 0; i < count; i++)
+    {
+        id_map[i] = i;
+    }
+
+    // Process each row from the database
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+    {
+        int id = sqlite3_column_int(stmt, 0);
+        const unsigned char *text = sqlite3_column_text(stmt, 1);
+        int length = sqlite3_column_int(stmt, 2);
+
+        // Find the corresponding result in our array
+        int result_idx = -1;
+        for (int i = 0; i < count; i++)
+        {
+            if (sorted[i].index == id)
+            {
+                result_idx = i;
+                break;
+            }
+        }
+
+        if (result_idx >= 0)
+        {
+            // Allocate memory for the metadata text
+            unsigned char *data_copy = malloc(length + 1); // +1 for null terminator
+            if (!data_copy)
+            {
+                continue; // Skip this result if malloc fails
+            }
+
+            // Copy the text data
+            memcpy(data_copy, text, length);
+            data_copy[length] = '\0'; // Ensure null termination
+
+            // Update the result with the metadata
+            sorted[result_idx].metadata.data = data_copy;
+            sorted[result_idx].metadata.length = length;
+
+            successful_retrievals++;
+        }
+    }
+
+    // Cleanup
+    sqlite3_finalize(stmt);
+    free(id_map);
+
+    // If we didn't retrieve all items, set empty JSON for the rest
+    for (int i = 0; i < count; i++)
+    {
+        if (!sorted[i].metadata.data)
+        {
+            sorted[i].metadata.data = strdup("{}");
+            sorted[i].metadata.length = 2;
+        }
+    }
+
+    return successful_retrievals;
+}
+
 int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                 const size_t vec_count, const uint32_t dimensions)
 {
 
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    if (!connection || !connection->sqlite_db)
+    {
+        return 0;
+    }
 
     char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
     sprintf(temp_vec_file_path, "%s.temp", file_path);
@@ -416,6 +567,56 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     if (!header_info)
     {
         printf("Failed to get vector file header info\n");
+        fclose(vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    // Create metadata table if it doesn't exist
+    char *create_table_sql = "CREATE TABLE IF NOT EXISTS metadata ("
+                             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                             "metadata TEXT,"
+                             "metadata_length INTEGER"
+                             ");";
+
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(connection->sqlite_db, create_table_sql, 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("SQL error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(connection->sqlite_db);
+        // free(sqlite_path);
+        free(header_info);
+        fclose(vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    // Create index on the id column if it doesn't exist
+    char *create_index_sql = "CREATE INDEX IF NOT EXISTS idx_metadata_id ON metadata(id);";
+    rc = sqlite3_exec(connection->sqlite_db, create_index_sql, 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Index creation error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(connection->sqlite_db);
+        // free(sqlite_path);
+        free(header_info);
+        fclose(vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    // Begin transaction for better performance
+    rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Transaction start error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(connection->sqlite_db);
+        // free(sqlite_path);
+        free(header_info);
         fclose(vec_file);
         free(temp_vec_file_path);
         return 0;
@@ -491,8 +692,10 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     // After reading dimensions, seek to end for appending
     fseek(vec_file, 0, SEEK_END);
 
+    size_t vec_size_with_id = (dimensions + 1) * sizeof(float);
     // Now calculate total vector size using dimensions
-    size_t total_vec_size = vec_count * header_info->dimensions * sizeof(float);
+    // size_t total_vec_size = vec_count * header_info->dimensions * sizeof(float);
+    size_t total_vec_size = vec_count * vec_size_with_id;
 
     // Calculate total sizes needed
     size_t total_meta_size = 0;
@@ -503,15 +706,17 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     // Allocate buffers
     unsigned char *vec_buffer = malloc(total_vec_size);
-    unsigned char *idx_buffer = malloc(vec_count * 12); // 12 bytes per index entry
-    unsigned char *meta_buffer = malloc(total_meta_size);
+    // unsigned char *idx_buffer = malloc(vec_count * 12); // 12 bytes per index entry
+    // unsigned char *meta_buffer = malloc(total_meta_size);
 
-    if (!vec_buffer || !idx_buffer || !meta_buffer)
+    if (!vec_buffer)
     {
         free(header_info);
         free(vec_buffer);
-        free(idx_buffer);
-        free(meta_buffer);
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
+        sqlite3_close(connection->sqlite_db);
+        // free(idx_buffer);
+        // free(meta_buffer);
         fclose(vec_file);
         fclose(idx_file);
         fclose(meta_file);
@@ -534,38 +739,89 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     size_t vec_size = header_info->dimensions * sizeof(float);
 
+    sqlite3_stmt *stmt;
+    const char *insert_sql = "INSERT INTO metadata (metadata, metadata_length) VALUES (?, ?);";
+    rc = sqlite3_prepare_v2(connection->sqlite_db, insert_sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to prepare statement: %s\n", sqlite3_errmsg(connection->sqlite_db));
+        free(vec_buffer);
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
+        sqlite3_close(connection->sqlite_db);
+        // free(sqlite_path);
+        free(header_info);
+        fclose(vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
     for (size_t i = 0; i < vec_count; i++)
     {
         if (!vectors[i])
         {
             continue;
         }
+
+        // insert metadata to table
+        sqlite3_bind_text(stmt, 1, metadatas[i], metadata_lengths[i], SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 2, metadata_lengths[i]); // Bind the length as an integer
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE)
+        {
+            printf("Failed to insert metadata: %s\n", sqlite3_errmsg(connection->sqlite_db));
+            // Continue anyway
+        }
+
+        // Get the rowid of the inserted metadata
+        sqlite3_int64 metadata_id = sqlite3_last_insert_rowid(connection->sqlite_db);
+
+        // Store metadata ID as a float in the first position
+        float md_id_float = (float)metadata_id;
+        memcpy(vec_buffer + vec_offset, &md_id_float, sizeof(float));
+        vec_offset += sizeof(float);
+
+        // Normalize vector
         normalize_vector(vectors[i], header_info->dimensions);
-        // Copy vector
+        // Copy vector into buffer
         memcpy(vec_buffer + vec_offset,
                vectors[i],
                vec_size);
         vec_offset += vec_size;
 
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+
         // Write index entry (offset + length)
-        uint64_t meta_pos = current_meta_offset + meta_offset;
-        uint32_t meta_len = metadata_lengths[i];
+        // uint64_t meta_pos = current_meta_offset + meta_offset;
+        // uint32_t meta_len = metadata_lengths[i];
 
-        memcpy(idx_buffer + idx_offset, &meta_pos, sizeof(uint64_t));
-        memcpy(idx_buffer + idx_offset + 8, &meta_len, sizeof(uint32_t));
-        idx_offset += 12;
+        // memcpy(idx_buffer + idx_offset, &meta_pos, sizeof(uint64_t));
+        // memcpy(idx_buffer + idx_offset + 8, &meta_len, sizeof(uint32_t));
+        // idx_offset += 12;
 
-        memcpy(meta_buffer + meta_offset,
-               metadatas[i],
-               metadata_lengths[i]);
+        // memcpy(meta_buffer + meta_offset,
+        //        metadatas[i],
+        //        metadata_lengths[i]);
 
-        meta_offset += metadata_lengths[i];
+        // meta_offset += metadata_lengths[i];
+    }
+
+    // Finalize statement
+    sqlite3_finalize(stmt);
+
+    // Commit transaction
+    rc = sqlite3_exec(connection->sqlite_db, "END TRANSACTION;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Transaction commit error: %s\n", err_msg);
+        sqlite3_free(err_msg);
     }
 
     // Single write for each file
     fwrite(vec_buffer, 1, total_vec_size, vec_file);
-    fwrite(idx_buffer, 1, vec_count * 12, idx_file);
-    fwrite(meta_buffer, 1, total_meta_size, meta_file);
+    // fwrite(idx_buffer, 1, vec_count * 12, idx_file);
+    // fwrite(meta_buffer, 1, total_meta_size, meta_file);
 
     // Position at start of file
     fseek(vec_file, 0, SEEK_SET);
@@ -584,8 +840,8 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     // Cleanup
     free(header_info);
     free(vec_buffer);
-    free(idx_buffer);
-    free(meta_buffer);
+    // free(idx_buffer);
+    // free(meta_buffer);
     fclose(vec_file);
     fclose(idx_file);
     fclose(meta_file);
@@ -602,11 +858,9 @@ size_t calculate_optimal_buffer_size(int dimensions)
     const size_t TARGET_BUFFER_MEMORY = 4 * 1024 * 1024; // 4MB
 
     // Calculate how many vectors would fit in our target memory
-    size_t bytes_per_vector = dimensions * sizeof(float);
+    // Account for the metadata ID float (+1)
+    size_t bytes_per_vector = (dimensions + 1) * sizeof(float);
     size_t optimal_vectors = TARGET_BUFFER_MEMORY / bytes_per_vector;
-
-    // Round to nearest power of 2 (optional, but can be more efficient)
-    // or we could round to nearest multiple of 512 or 1024
 
     // Add some bounds checking
     if (optimal_vectors < 512)
