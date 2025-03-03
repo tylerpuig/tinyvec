@@ -41,7 +41,9 @@ package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.4",
-    "pytest-asyncio>=0.25.3"
+    "pytest-asyncio>=0.25.3",
+    "setuptools>=75.8.0",
+    "wheel>=0.45.1"
 ]
 
 [project.urls]

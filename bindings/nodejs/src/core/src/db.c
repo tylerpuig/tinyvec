@@ -271,7 +271,6 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
     // Allocate vector buffer
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
-    // vec_buffer = (float *)aligned_malloc(sizeof(float) * header_info->dimensions * BUFFER_SIZE, 32);
     vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 32);
     if (!vec_buffer)
     {
@@ -299,7 +298,6 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
     {
         int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
-        // size_t read = fread(vec_buffer, sizeof(float) * header_info->dimensions, vectors_to_read, connection->vec_file);
         size_t read = fread(vec_buffer, sizeof(float) * (header_info->dimensions + 1), vectors_to_read, connection->vec_file);
         if (read != vectors_to_read)
         {
@@ -388,14 +386,7 @@ cleanup:
     return NULL;
 }
 
-/**
- * Retrieves metadata for an array of IDs from the SQLite database
- *
- * @param db The SQLite database connection
- * @param sorted Array of VecResult structures to be populated with metadata
- * @param count Number of items in the sorted array
- * @return int Number of successful metadata retrievals, or -1 on error
- */
+// Retrieves metadata for an array of IDs from the SQLite database
 int get_metadata_batch(sqlite3 *db, VecResult *sorted, int count)
 {
     if (!db || !sorted || count <= 0)
