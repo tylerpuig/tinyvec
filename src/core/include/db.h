@@ -22,6 +22,7 @@ extern "C"
 #include <stdbool.h>
 #include "file.h"
 #include "vec_types.h"
+#include "sqlite3.h"
 
     typedef struct TinyVecConnection
     {
@@ -32,6 +33,7 @@ extern "C"
         FILE *md_file;
         MmapInfo *idx_mmap;
         MmapInfo *md_mmap;
+        sqlite3 *sqlite_db;
     } TinyVecConnection;
 
     typedef struct
@@ -52,6 +54,7 @@ extern "C"
     TinyVecConnection *get_tinyvec_connection(const char *file_path);
     bool add_to_connection_pool(TinyVecConnection *connection);
     size_t calculate_optimal_buffer_size(int dimensions);
+    int get_metadata_batch(sqlite3 *db, VecResult *sorted, int count);
 #ifdef __cplusplus
 }
 #endif
