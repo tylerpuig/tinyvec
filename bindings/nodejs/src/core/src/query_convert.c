@@ -121,41 +121,6 @@ void append_json_value(StringBuffer *buffer, cJSON *value)
     }
 }
 
-// Process $in or $nin operator
-void process_in_operator(const char *field_path, cJSON *values, StringBuffer *buffer, bool is_negated)
-{
-    if (!cJSON_IsArray(values))
-    {
-        return;
-    }
-
-    string_buffer_append(buffer, " AND json_extract(metadata, '$.");
-    string_buffer_append(buffer, field_path);
-    string_buffer_append(buffer, "') ");
-
-    if (is_negated)
-    {
-        string_buffer_append(buffer, "NOT ");
-    }
-
-    string_buffer_append(buffer, "IN (");
-
-    int count = cJSON_GetArraySize(values);
-    for (int i = 0; i < count; i++)
-    {
-        cJSON *item = cJSON_GetArrayItem(values, i);
-
-        if (i > 0)
-        {
-            string_buffer_append(buffer, ", ");
-        }
-
-        append_json_value(buffer, item);
-    }
-
-    string_buffer_append(buffer, ")");
-}
-
 // Process comparison operators like $eq, $gt, etc.
 void process_comparison(const char *field_path, const char *op, cJSON *value, StringBuffer *buffer)
 {
@@ -207,7 +172,7 @@ void process_comparison(const char *field_path, const char *op, cJSON *value, St
 
         if (strcmp(op, "$eq") == 0)
         {
-            string_buffer_append(buffer, "=");
+            string_buffer_append(buffer, "= ");
             append_json_value(buffer, value);
         }
         else if (strcmp(op, "$ne") == 0)

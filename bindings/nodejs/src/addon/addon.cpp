@@ -58,32 +58,56 @@ namespace
         {
             std::vector<SearchResult> result_vec;
 
-            std::unique_ptr<VecResult[], void (*)(void *)> result(nullptr, free);
+            // Use unique_ptr with custom deleter for DBSearchResult
+            std::unique_ptr<DBSearchResult, void (*)(DBSearchResult *)> search_result(nullptr,
+                                                                                      [](DBSearchResult *ptr)
+                                                                                      {
+                                                                                          if (ptr)
+                                                                                          {
+                                                                                              // Free individual metadata if needed
+                                                                                              if (ptr->results)
+                                                                                              {
+                                                                                                  for (int i = 0; i < ptr->count; i++)
+                                                                                                  {
+                                                                                                      free(ptr->results[i].metadata.data);
+                                                                                                  }
+                                                                                                  free(ptr->results);
+                                                                                              }
+                                                                                              free(ptr);
+                                                                                          }
+                                                                                      });
 
             if (searchData->metadata_filters)
             {
                 // Get the top-k results with filter
-                result.reset(vector_query_with_filter(searchData->file_path, searchData->query_vec, searchData->top_k, searchData->metadata_filters));
+                search_result.reset(vector_query_with_filter(searchData->file_path, searchData->query_vec, searchData->top_k, searchData->metadata_filters));
             }
             else
             {
                 // Get the top-k results without filter
-                result.reset(vector_query(searchData->file_path, searchData->query_vec, searchData->top_k));
+                search_result.reset(vector_query(searchData->file_path, searchData->query_vec, searchData->top_k));
             }
 
-            if (!result)
+            if (!search_result || !search_result->results || search_result->count <= 0)
             {
                 searchData->results = std::vector<SearchResult>();
                 return;
             }
 
-            // Reserve space for the top-k results
-            result_vec.reserve(searchData->top_k);
-            // Copy the top-k results to the result vector
-            for (int i = 0; i < searchData->top_k; i++)
+            // Use the actual count from the search result, which may be less than top_k
+            int result_count = (searchData->top_k < search_result->count) ? searchData->top_k : search_result->count;
+
+            // Reserve space for the results
+            result_vec.reserve(result_count);
+
+            // Copy the results to the result vector
+            for (int i = 0; i < result_count; i++)
             {
-                result_vec.push_back({result[i].index, result[i].similarity, result[i].metadata});
+                result_vec.push_back({search_result->results[i].index,
+                                      search_result->results[i].similarity,
+                                      search_result->results[i].metadata});
             }
+
             searchData->results = std::move(result_vec);
         }
         catch (...)
@@ -155,7 +179,6 @@ namespace
 
             // Add metadata to result object
             napi_set_named_property(env, resultObj, "metadata", metadata);
-            free(searchData->results[i].metadata.data);
         }
 
         // If there was an error, reject the promise

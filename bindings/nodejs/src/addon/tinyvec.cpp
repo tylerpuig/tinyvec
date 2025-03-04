@@ -3,12 +3,12 @@
 #include "../../../src/core/include/file.h"
 #include <iostream>
 
-extern "C" VecResult *vector_query(const char *file_path, const float *query_vec, const int top_k)
+extern "C" DBSearchResult *vector_query(const char *file_path, const float *query_vec, const int top_k)
 {
     return get_top_k(file_path, query_vec, top_k);
 }
 
-extern "C" VecResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter)
+extern "C" DBSearchResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter)
 {
     return get_top_k_with_filter(file_path, query_vec, top_k, json_filter);
 }

@@ -239,8 +239,8 @@ IndexFileStats get_index_stats(const char *file_path)
     return stats;
 }
 
-VecResult *get_top_k_with_filter(const char *file_path, const float *query_vec,
-                                 const int top_k, const char *json_filter)
+DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_vec,
+                                      const int top_k, const char *json_filter)
 {
     TinyVecConnection *connection = NULL;
     VecFileHeaderInfo *header_info = NULL;
@@ -268,13 +268,11 @@ VecResult *get_top_k_with_filter(const char *file_path, const float *query_vec,
 
     if (header_info->dimensions == 0 || header_info->vector_count == 0)
     {
-        return sorted;
+        goto cleanup;
     }
 
     // Convert JSON filter to SQL
     char *sql_where = json_query_to_sql(json_filter);
-
-    // printf("SQL WHERE: %s\n", sql_where);
 
     // Get filtered IDs from SQLite
     if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
@@ -366,7 +364,20 @@ VecResult *get_top_k_with_filter(const char *file_path, const float *query_vec,
 
     get_metadata_batch(connection->sqlite_db, sorted, min_heap->size);
 
-    return sorted;
+    int results_found = min_heap->size;
+
+    if (vec_buffer)
+        aligned_free(vec_buffer);
+    if (header_info)
+        free(header_info);
+    if (min_heap)
+        freeHeap(min_heap);
+    free(query_vec_norm);
+
+    DBSearchResult *search_result = malloc(sizeof(DBSearchResult));
+    search_result->results = sorted;
+    search_result->count = results_found;
+    return search_result;
 
 cleanup:
     if (filtered_ids)
@@ -394,7 +405,7 @@ cleanup:
     return NULL;
 }
 
-VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k)
+DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const int top_k)
 {
     TinyVecConnection *connection = NULL;
     VecFileHeaderInfo *header_info = NULL;
@@ -490,6 +501,7 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     }
 
     get_metadata_batch(connection->sqlite_db, sorted, min_heap->size);
+    int results_found = min_heap->size;
 
     if (vec_buffer)
         aligned_free(vec_buffer);
@@ -499,7 +511,10 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         freeHeap(min_heap);
     free(query_vec_norm);
 
-    return sorted;
+    DBSearchResult *search_result = malloc(sizeof(DBSearchResult));
+    search_result->results = sorted;
+    search_result->count = results_found;
+    return search_result;
 
 cleanup:
     if (sorted)
