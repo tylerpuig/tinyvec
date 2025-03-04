@@ -25,6 +25,8 @@
 #include "../include/distance.h"
 #include "../include/sqlite3.h"
 #include "../include/vec_types.h"
+#include "../include/query_convert.h"
+#include "../include/utils.h"
 
 // Architecture-specific SIMD includes
 #if defined(__x86_64__) || defined(_M_X64)
@@ -237,16 +239,16 @@ IndexFileStats get_index_stats(const char *file_path)
     return stats;
 }
 
-VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k)
+VecResult *get_top_k_with_filter(const char *file_path, const float *query_vec,
+                                 const int top_k, const char *json_filter)
 {
     TinyVecConnection *connection = NULL;
     VecFileHeaderInfo *header_info = NULL;
     float *vec_buffer = NULL;
     MinHeap *min_heap = NULL;
     VecResult *sorted = NULL;
-    FileMetadataPaths *md_paths = NULL;
-    FILE *idx_file = NULL;
-    FILE *md_file = NULL;
+    int *filtered_ids = NULL;
+    int filtered_count = 0;
 
     // Get connection
     connection = get_tinyvec_connection(file_path);
@@ -267,6 +269,158 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
     if (header_info->dimensions == 0 || header_info->vector_count == 0)
     {
         return sorted;
+    }
+
+    // Convert JSON filter to SQL
+    char *sql_where = json_query_to_sql(json_filter);
+
+    // printf("SQL WHERE: %s\n", sql_where);
+
+    // Get filtered IDs from SQLite
+    if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
+    {
+        printf("Failed to get filtered IDs\n");
+        free(sql_where);
+        goto cleanup;
+    }
+
+    free(sql_where);
+
+    // If no results match the filter, return empty result
+    if (filtered_count == 0)
+    {
+        goto cleanup;
+    }
+
+    // Sort the IDs for binary search later
+    qsort(filtered_ids, filtered_count, sizeof(int), compare_ints);
+
+    // Allocate vector buffer
+    const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
+    vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 32);
+    if (!vec_buffer)
+    {
+        printf("Failed to allocate vector buffer\n");
+        goto cleanup;
+    }
+
+    float *query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
+
+    for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
+    {
+        PREFETCH((char *)&query_vec_norm[i]);
+    }
+
+    // Create min heap
+    min_heap = createMinHeap(top_k);
+    if (!min_heap)
+    {
+        printf("Failed to create min heap\n");
+        goto cleanup;
+    }
+
+    // Process vectors
+    for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
+    {
+        int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
+        size_t read = fread(vec_buffer, sizeof(float) * (header_info->dimensions + 1), vectors_to_read, connection->vec_file);
+        if (read != vectors_to_read)
+        {
+
+            continue;
+        }
+
+        for (int j = 0; j < vectors_to_read; j++)
+        {
+
+            // Get pointer to start of vector+id block
+            float *vec_block = vec_buffer + (j * (header_info->dimensions + 1));
+
+            // Extract metadata ID from first float
+            int metadata_id = (int)vec_block[0];
+
+            if (binary_search_int(filtered_ids, filtered_count, metadata_id) == -1)
+            {
+                continue;
+            }
+
+            // Actual vector data starts after the metadata ID
+            float *current_vec = vec_block + 1;
+            PREFETCH((char *)(current_vec + header_info->dimensions));
+            float dot = dot_product(query_vec_norm, current_vec, header_info->dimensions);
+
+            if (dot > min_heap->data[0] || min_heap->size < top_k)
+            {
+                insert(min_heap, dot, metadata_id);
+            }
+        }
+    }
+
+    // Create sorted results
+    sorted = createVecResult(min_heap, top_k);
+    if (!sorted)
+    {
+        printf("Failed to create sorted results\n");
+        goto cleanup;
+    }
+
+    get_metadata_batch(connection->sqlite_db, sorted, min_heap->size);
+
+    return sorted;
+
+cleanup:
+    if (filtered_ids)
+        free(filtered_ids);
+    if (sorted)
+    {
+        for (int i = 0; i < min_heap->size; i++)
+        {
+            if (sorted[i].metadata.data)
+            {
+                free(sorted[i].metadata.data);
+            }
+        }
+        free(sorted);
+    }
+
+    free(query_vec_norm);
+    if (vec_buffer)
+        aligned_free(vec_buffer);
+    if (header_info)
+        free(header_info);
+    if (min_heap)
+        freeHeap(min_heap);
+
+    return NULL;
+}
+
+VecResult *get_top_k(const char *file_path, const float *query_vec, const int top_k)
+{
+    TinyVecConnection *connection = NULL;
+    VecFileHeaderInfo *header_info = NULL;
+    float *vec_buffer = NULL;
+    MinHeap *min_heap = NULL;
+    VecResult *sorted = NULL;
+
+    // Get connection
+    connection = get_tinyvec_connection(file_path);
+    if (!connection)
+    {
+        printf("Failed to get connection\n");
+        goto cleanup;
+    }
+
+    // Get header info, also resets the file position
+    header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
+    if (!header_info)
+    {
+        printf("Failed to get header info\n");
+        goto cleanup;
+    }
+
+    if (header_info->dimensions == 0 || header_info->vector_count == 0)
+    {
+        goto cleanup;
     }
 
     // Allocate vector buffer
@@ -309,7 +463,6 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
         {
 
             // Get pointer to start of vector+id block
-            // float *vec_block = vec_buffer + (j * header_info->dimensions);
             float *vec_block = vec_buffer + (j * (header_info->dimensions + 1));
 
             // Extract metadata ID from first float
@@ -317,13 +470,11 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
             // Actual vector data starts after the metadata ID
             float *current_vec = vec_block + 1;
-            // float *current_vec = vec_buffer + (j * header_info->dimensions);
             PREFETCH((char *)(current_vec + header_info->dimensions));
             float dot = dot_product(query_vec_norm, current_vec, header_info->dimensions);
 
             if (dot > min_heap->data[0] || min_heap->size < top_k)
             {
-                // insert(min_heap, dot, vec_count);
                 insert(min_heap, dot, metadata_id);
             }
             vec_count++;
@@ -342,16 +493,10 @@ VecResult *get_top_k(const char *file_path, const float *query_vec, const int to
 
     if (vec_buffer)
         aligned_free(vec_buffer);
-    if (idx_file)
-        fclose(idx_file);
-    if (md_file)
-        fclose(md_file);
     if (header_info)
         free(header_info);
     if (min_heap)
         freeHeap(min_heap);
-    if (md_paths)
-        free(md_paths);
     free(query_vec_norm);
 
     return sorted;
@@ -369,21 +514,74 @@ cleanup:
         free(sorted);
     }
 
-    free(query_vec_norm);
+    if (query_vec_norm)
+        free(query_vec_norm);
     if (vec_buffer)
         aligned_free(vec_buffer);
-    if (idx_file)
-        fclose(idx_file);
-    if (md_file)
-        fclose(md_file);
     if (header_info)
         free(header_info);
     if (min_heap)
         freeHeap(min_heap);
-    if (md_paths)
-        free(md_paths);
 
     return NULL;
+}
+
+bool get_filtered_ids(sqlite3 *db, const char *where_clause, int **ids_out, int *count_out)
+{
+    sqlite3_stmt *stmt = NULL;
+    char *sql = NULL;
+    int *ids = NULL;
+    int count = 0;
+    int capacity = 1024; // Initial capacity
+    bool success = false;
+
+    // Allocate initial array
+    ids = malloc(capacity * sizeof(int));
+    if (!ids)
+        return false;
+
+    // Build query
+    sql = sqlite3_mprintf("SELECT id FROM metadata WHERE %s", where_clause);
+    if (!sql)
+        goto cleanup;
+
+    // Prepare statement
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    {
+        printf("Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        goto cleanup;
+    }
+
+    // Execute query and collect IDs
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        // Resize array if needed
+        if (count >= capacity)
+        {
+            capacity *= 2;
+            int *new_ids = realloc(ids, capacity * sizeof(int));
+            if (!new_ids)
+                goto cleanup;
+            ids = new_ids;
+        }
+
+        ids[count++] = sqlite3_column_int(stmt, 0);
+    }
+
+    // Set output parameters
+    *ids_out = ids;
+    *count_out = count;
+    success = true;
+
+cleanup:
+    if (stmt)
+        sqlite3_finalize(stmt);
+    if (sql)
+        sqlite3_free(sql);
+    if (!success && ids)
+        free(ids);
+
+    return success;
 }
 
 // Retrieves metadata for an array of IDs from the SQLite database
