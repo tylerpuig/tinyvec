@@ -55,6 +55,8 @@
             "src/core/src/minheap.c",
             "src/core/src/distance.c",
             "src/core/src/sqlite3.c",
+            "src/core/src/utils.c",
+            "src/core/src/query_convert.c",
         ],
         "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include\")",

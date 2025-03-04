@@ -132,7 +132,7 @@ void process_in_operator(const char *field_path, cJSON *values, StringBuffer *bu
         return;
     }
 
-    string_buffer_append(buffer, " AND json_extract(content, '$.");
+    string_buffer_append(buffer, " AND json_extract(metadata, '$.");
     string_buffer_append(buffer, field_path);
     string_buffer_append(buffer, "') ");
 
@@ -163,7 +163,7 @@ void process_in_operator(const char *field_path, cJSON *values, StringBuffer *bu
 void process_comparison(const char *field_path, const char *op, cJSON *value, StringBuffer *buffer)
 {
     // Start building the condition
-    string_buffer_append(buffer, " AND json_extract(content, '$.");
+    string_buffer_append(buffer, " AND json_extract(metadata, '$.");
     string_buffer_append(buffer, field_path);
     string_buffer_append(buffer, "') ");
 
@@ -275,7 +275,7 @@ void process_field(const char *field, cJSON *value, StringBuffer *buffer, const 
     // Handle direct equality comparison (shorthand)
     else
     {
-        string_buffer_append(buffer, " AND json_extract(content, '$.");
+        string_buffer_append(buffer, " AND json_extract(metadata, '$.");
         string_buffer_append(buffer, field);
         string_buffer_append(buffer, "') = ");
         append_json_value(buffer, value);

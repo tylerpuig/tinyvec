@@ -8,6 +8,11 @@ extern "C" VecResult *vector_query(const char *file_path, const float *query_vec
     return get_top_k(file_path, query_vec, top_k);
 }
 
+extern "C" VecResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter)
+{
+    return get_top_k_with_filter(file_path, query_vec, top_k, json_filter);
+}
+
 extern "C" int insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                                    const size_t vec_count, const uint32_t dimensions)
 {

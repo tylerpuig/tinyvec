@@ -23,6 +23,7 @@ namespace
         float *query_vec;
         int top_k;
         char *file_path;
+        char *metadata_filters;
         std::vector<SearchResult> results;
         napi_deferred deferred;
         napi_async_work work;
@@ -56,16 +57,26 @@ namespace
         try
         {
             std::vector<SearchResult> result_vec;
-            // Get the top-k results
-            std::unique_ptr<VecResult[], void (*)(void *)> result(vector_query(searchData->file_path, searchData->query_vec, searchData->top_k), free);
-            // If result is NULL, return
+
+            std::unique_ptr<VecResult[], void (*)(void *)> result(nullptr, free);
+
+            if (searchData->metadata_filters)
+            {
+                // Get the top-k results with filter
+                result.reset(vector_query_with_filter(searchData->file_path, searchData->query_vec, searchData->top_k, searchData->metadata_filters));
+            }
+            else
+            {
+                // Get the top-k results without filter
+                result.reset(vector_query(searchData->file_path, searchData->query_vec, searchData->top_k));
+            }
+
             if (!result)
             {
-
-                // searchData->results = std::move(result_vec);
                 searchData->results = std::vector<SearchResult>();
                 return;
             }
+
             // Reserve space for the top-k results
             result_vec.reserve(searchData->top_k);
             // Copy the top-k results to the result vector
@@ -170,9 +181,9 @@ namespace
         napi_status status;
 
         // Get arguments
-        size_t argc = 3;
+        size_t argc = 4;
         // Array of args
-        napi_value args[3];
+        napi_value args[4];
         status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
         if (status != napi_ok)
             return nullptr;
@@ -241,6 +252,51 @@ namespace
         asyncData->query_vec = float_data;
         asyncData->top_k = top_k;
         asyncData->file_path = file_path;
+        asyncData->metadata_filters = NULL;
+
+        if (argc > 3)
+        {
+
+            napi_valuetype valuetype;
+            status = napi_typeof(env, args[3], &valuetype);
+
+            if (status == napi_ok && valuetype == napi_object)
+            {
+                // Check if the object has a "filter" property
+                bool hasFilterProperty;
+                status = napi_has_named_property(env, args[3], "filter", &hasFilterProperty);
+
+                if (status == napi_ok && hasFilterProperty)
+                {
+                    // Get the filter property value
+                    napi_value filterValue;
+                    status = napi_get_named_property(env, args[3], "filter", &filterValue);
+
+                    if (status == napi_ok)
+                    {
+                        // Get the string size
+                        size_t filter_str_size;
+                        status = napi_get_value_string_utf8(env, filterValue, nullptr, 0, &filter_str_size);
+
+                        if (status == napi_ok)
+                        {
+                            // Allocate memory for the filter string
+                            char *metadata_filters = new char[filter_str_size + 1];
+                            status = napi_get_value_string_utf8(env, filterValue, metadata_filters, filter_str_size + 1, nullptr);
+
+                            if (status == napi_ok)
+                            {
+                                asyncData->metadata_filters = metadata_filters;
+                            }
+                            else
+                            {
+                                delete[] metadata_filters;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Create promise
         napi_value promise;
