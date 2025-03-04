@@ -121,9 +121,6 @@ void append_json_value(StringBuffer *buffer, cJSON *value)
     }
 }
 
-// Forward declaration
-void process_query_object(cJSON *obj, StringBuffer *buffer, const char *path_prefix);
-
 // Process $in or $nin operator
 void process_in_operator(const char *field_path, cJSON *values, StringBuffer *buffer, bool is_negated)
 {
@@ -162,123 +159,151 @@ void process_in_operator(const char *field_path, cJSON *values, StringBuffer *bu
 // Process comparison operators like $eq, $gt, etc.
 void process_comparison(const char *field_path, const char *op, cJSON *value, StringBuffer *buffer)
 {
-    // Start building the condition
-    string_buffer_append(buffer, " AND json_extract(metadata, '$.");
-    string_buffer_append(buffer, field_path);
-    string_buffer_append(buffer, "') ");
-
-    if (strcmp(op, "$eq") == 0)
+    // Special handling for array membership operations
+    if (strcmp(op, "$in") == 0)
     {
-        string_buffer_append(buffer, "=");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$ne") == 0)
-    {
-        string_buffer_append(buffer, "!=");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$gt") == 0)
-    {
-        string_buffer_append(buffer, ">");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$lt") == 0)
-    {
-        string_buffer_append(buffer, "<");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$gte") == 0)
-    {
-        string_buffer_append(buffer, ">=");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$lte") == 0)
-    {
-        string_buffer_append(buffer, "<=");
-        append_json_value(buffer, value);
-    }
-    else if (strcmp(op, "$exists") == 0)
-    {
-        if (cJSON_IsTrue(value))
+        if (!cJSON_IsArray(value) || cJSON_GetArraySize(value) == 0)
         {
-            string_buffer_append(buffer, "IS NOT NULL");
+            string_buffer_append(buffer, " AND 0"); // Always false for empty array
+            return;
         }
-        else
-        {
-            string_buffer_append(buffer, "IS NULL");
-        }
-    }
-    else if (strcmp(op, "$in") == 0)
-    {
-        // Don't call a separate function, handle it directly here
-        if (cJSON_IsArray(value))
-        {
-            string_buffer_append(buffer, "IN (");
 
-            int count = cJSON_GetArraySize(value);
-            for (int i = 0; i < count; i++)
-            {
-                cJSON *item = cJSON_GetArrayItem(value, i);
+        // For arrays like [6], we need to check if 6 is in the document's array field
+        // SQLite doesn't have a direct array contains operator, so we need to use JSON functions
 
-                if (i > 0)
-                {
-                    string_buffer_append(buffer, ", ");
-                }
+        // Get the first item to check (assuming simple case of checking one value)
+        cJSON *item = cJSON_GetArrayItem(value, 0);
 
-                append_json_value(buffer, item);
-            }
-
-            string_buffer_append(buffer, ")");
-        }
+        // Use SQLite's json_each to iterate through the array and check for membership
+        string_buffer_append(buffer, " AND EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
+        string_buffer_append(buffer, field_path);
+        string_buffer_append(buffer, "')) WHERE value = ");
+        append_json_value(buffer, item);
+        string_buffer_append(buffer, ")");
     }
     else if (strcmp(op, "$nin") == 0)
     {
-        // Same as $in but with NOT
-        if (cJSON_IsArray(value))
+        if (!cJSON_IsArray(value) || cJSON_GetArraySize(value) == 0)
         {
-            string_buffer_append(buffer, "NOT IN (");
+            string_buffer_append(buffer, " AND 1"); // Always true for empty array
+            return;
+        }
 
-            int count = cJSON_GetArraySize(value);
-            for (int i = 0; i < count; i++)
+        // Similar to $in but with NOT EXISTS
+        cJSON *item = cJSON_GetArrayItem(value, 0);
+
+        string_buffer_append(buffer, " AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
+        string_buffer_append(buffer, field_path);
+        string_buffer_append(buffer, "')) WHERE value = ");
+        append_json_value(buffer, item);
+        string_buffer_append(buffer, ")");
+    }
+    else
+    {
+        // Regular field comparison for non-array operators
+        string_buffer_append(buffer, " AND json_extract(metadata, '$.");
+        string_buffer_append(buffer, field_path);
+        string_buffer_append(buffer, "') ");
+
+        if (strcmp(op, "$eq") == 0)
+        {
+            string_buffer_append(buffer, "=");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$ne") == 0)
+        {
+            string_buffer_append(buffer, "!=");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$gt") == 0)
+        {
+            string_buffer_append(buffer, ">");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$lt") == 0)
+        {
+            string_buffer_append(buffer, "<");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$gte") == 0)
+        {
+            string_buffer_append(buffer, ">=");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$lte") == 0)
+        {
+            string_buffer_append(buffer, "<=");
+            append_json_value(buffer, value);
+        }
+        else if (strcmp(op, "$exists") == 0)
+        {
+            if (cJSON_IsTrue(value))
             {
-                cJSON *item = cJSON_GetArrayItem(value, i);
-
-                if (i > 0)
-                {
-                    string_buffer_append(buffer, ", ");
-                }
-
-                append_json_value(buffer, item);
+                string_buffer_append(buffer, "IS NOT NULL");
             }
-
-            string_buffer_append(buffer, ")");
+            else
+            {
+                string_buffer_append(buffer, "IS NULL");
+            }
         }
     }
 }
 
 // Process field values or nested operators
-void process_field(const char *field, cJSON *value, StringBuffer *buffer, const char *path_prefix)
+void process_field(const char *field_path, cJSON *value, StringBuffer *buffer)
 {
-    // Handle objects with operators
-    if (cJSON_IsObject(value))
-    {
-        cJSON *child = NULL;
-        cJSON_ArrayForEach(child, value)
-        {
-            const char *op = child->string;
-            if (op[0] == '$')
-            {
-                process_comparison(field, op, child, buffer);
-            }
-        }
-    }
     // Handle direct equality comparison (shorthand)
-    else
+    if (!cJSON_IsObject(value) || cJSON_GetArraySize(value) == 0)
     {
         string_buffer_append(buffer, " AND json_extract(metadata, '$.");
-        string_buffer_append(buffer, field);
+        string_buffer_append(buffer, field_path);
         string_buffer_append(buffer, "') = ");
         append_json_value(buffer, value);
+        return;
+    }
+
+    // Check if this is an operator object (keys starting with $)
+    int has_operators = 0;
+    cJSON *child = NULL;
+    cJSON_ArrayForEach(child, value)
+    {
+        const char *key = child->string;
+        if (key && key[0] == '$')
+        {
+            has_operators = 1;
+            process_comparison(field_path, key, child, buffer);
+        }
+    }
+
+    // If no operators found, it's a nested object
+    if (!has_operators)
+    {
+        process_object(value, buffer, field_path);
+    }
+}
+
+void process_object(cJSON *obj, StringBuffer *buffer, const char *path_prefix)
+{
+    cJSON *child = NULL;
+    cJSON_ArrayForEach(child, obj)
+    {
+        const char *key = child->string;
+        if (!key)
+            continue;
+
+        // Build the full field path
+        char field_path[256] = {0};
+        if (path_prefix && *path_prefix)
+        {
+            snprintf(field_path, sizeof(field_path), "%s.%s", path_prefix, key);
+        }
+        else
+        {
+            strncpy(field_path, key, sizeof(field_path) - 1);
+        }
+
+        // Process this field
+        process_field(field_path, child, buffer);
     }
 }
 
@@ -294,8 +319,19 @@ void process_query_object(cJSON *obj, StringBuffer *buffer, const char *path_pre
         if (!key)
             continue;
 
-        // Process the field
-        process_field(key, child, buffer, path_prefix);
+        // Build the full field path if there's a prefix
+        char field_path[256] = {0};
+        if (path_prefix && *path_prefix)
+        {
+            snprintf(field_path, sizeof(field_path), "%s.%s", path_prefix, key);
+            // Process the field with the combined path
+            process_field(field_path, child, buffer);
+        }
+        else
+        {
+            // Process the field with just the key as the path
+            process_field(key, child, buffer);
+        }
     }
 }
 
@@ -321,7 +357,7 @@ char *json_query_to_sql(const char *json)
     string_buffer_append(buffer, "1=1");
 
     // Process the query
-    process_query_object(root, buffer, "");
+    process_object(root, buffer, "");
 
     // Get the result and clean up
     char *result = strdup(buffer->data);
@@ -330,7 +366,6 @@ char *json_query_to_sql(const char *json)
 
     return result;
 }
-
 // Example usage
 //     const char *query = "{\"name\":{\"$eq\":\"John\"},\"age\":{\"$gt\":25},\"tags\":{\"$in\":[\"admin\",\"user\"]}}";
 
