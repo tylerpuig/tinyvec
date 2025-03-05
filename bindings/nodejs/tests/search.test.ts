@@ -2,12 +2,10 @@ import { TinyVecClient } from "../src/index";
 import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
-import { generateRandomVector } from "./utils";
+import * as testUtils from "./utils";
 
 describe("TinyVecClient Search", () => {
   let tempDir: string;
-  let dbPath: string;
-  let client: TinyVecClient | null;
   const DIMENSIONS = 128;
 
   function normalizeVector(vector: Float32Array) {
@@ -36,7 +34,7 @@ describe("TinyVecClient Search", () => {
   };
 
   // Helper to prepare test data
-  async function insertTestVectors() {
+  async function insertTestVectors(client: TinyVecClient) {
     const insertions: TinyVecInsertion[] = Array(10)
       .fill(null)
       .map((_, i) => ({
@@ -48,8 +46,8 @@ describe("TinyVecClient Search", () => {
         },
       }));
 
-    await client!.insert(insertions);
-    return insertions;
+    const insertCount = await client.insert(insertions);
+    return insertCount;
   }
 
   beforeEach(async () => {
@@ -59,17 +57,15 @@ describe("TinyVecClient Search", () => {
     // Create a temporary directory for each test inside 'temp'
     tempDir = path.join("temp", `test-${Date.now()}`);
     await fs.mkdir(tempDir);
-
-    dbPath = path.join(tempDir, "test.db");
-    client = TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
   });
 
   test("should find exact matches", async () => {
-    const insertions = await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
 
     // Search using the exact same vector as document_5
     const searchVector = createVector(5);
-    const results = await client!.search<MyInsertType>(searchVector, 1);
+    const results = await newClient.search<MyInsertType>(searchVector, 1);
 
     expect(results).toHaveLength(1);
     expect(results[0]?.metadata.id).toBe(5);
@@ -77,23 +73,23 @@ describe("TinyVecClient Search", () => {
   });
 
   test("should return correct number of results with topK", async () => {
-    await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
 
-    const indexstats = await client!.getIndexStats();
+    const indexstats = await newClient.getIndexStats();
     expect(indexstats.vectors).toBe(10);
     expect(indexstats.dimensions).toBe(128);
 
     const searchVector = createVector(3);
     const topK = 5;
 
-    const results = await client!.search(searchVector, topK);
+    const results = await newClient.search(searchVector, topK);
 
     expect(results).toHaveLength(topK);
   });
 
   test("should return empty result array if no vectors are found without dimensions in config or insertions", async () => {
-    const randInt = Math.floor(Math.random() * 1000);
-    const newClient = TinyVecClient.connect(dbPath + randInt.toString());
+    const newClient = TinyVecClient.connect(testUtils.getRandDbPath(tempDir));
     const indexStats = await newClient.getIndexStats();
     expect(indexStats.vectors).toBe(0);
     expect(indexStats.dimensions).toBe(0);
@@ -107,22 +103,24 @@ describe("TinyVecClient Search", () => {
   });
 
   test("should throw an error if topK is less than or equal to 0", async () => {
-    await insertTestVectors();
-    const indexStats = await client!.getIndexStats();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
+    const indexStats = await newClient.getIndexStats();
     expect(indexStats.vectors).toBe(10);
     expect(indexStats.dimensions).toBe(128);
 
     const searchVector = createVector(3);
     const topK = -5;
 
-    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+    await expect(newClient.search(searchVector, topK)).rejects.toThrow(
       "Top K must be a positive number."
     );
   });
 
   test("should throw an error if topK is not a number", async () => {
-    await insertTestVectors();
-    const indexStats = await client!.getIndexStats();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
+    const indexStats = await newClient.getIndexStats();
     expect(indexStats.vectors).toBe(10);
     expect(indexStats.dimensions).toBe(128);
 
@@ -130,14 +128,15 @@ describe("TinyVecClient Search", () => {
     const topK = "5";
 
     // @ts-ignore
-    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+    await expect(newClient.search(searchVector, topK)).rejects.toThrow(
       "Top K must be a positive number."
     );
   });
 
   test("should throw an error if search vector is not valid numeric array type", async () => {
-    await insertTestVectors();
-    const indexStats = await client!.getIndexStats();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
+    const indexStats = await newClient.getIndexStats();
     expect(indexStats.vectors).toBe(10);
     expect(indexStats.dimensions).toBe(128);
 
@@ -145,16 +144,17 @@ describe("TinyVecClient Search", () => {
     const topK = 5;
 
     // @ts-ignore
-    await expect(client!.search(searchVector, topK)).rejects.toThrow(
+    await expect(newClient.search(searchVector, topK)).rejects.toThrow(
       "Vector conversion failed: Unsupported array type"
     );
   });
 
   test("should return results in order of similarity", async () => {
-    await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
 
     const searchVector = createVector(2);
-    const results = await client!.search(searchVector, 3);
+    const results = await newClient.search(searchVector, 3);
 
     // The closest vectors should be 2, then 1 or 3
     expect(results[0].metadata.id).toBe(2);
@@ -165,23 +165,25 @@ describe("TinyVecClient Search", () => {
   });
 
   test("should handle search with no similar results", async () => {
-    await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
 
     // Create a very different vector
     const searchVector = new Float32Array(DIMENSIONS).fill(999);
-    const results = await client!.search(searchVector, 5);
+    const results = await newClient.search(searchVector, 5);
 
     // Should still return results, but with lower similarity scores
     expect(results).toHaveLength(5);
   });
 
   test("should convert an array to a Float32Array", async () => {
-    await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
 
     // Create a very different vector
-    const searchVector = [...generateRandomVector(DIMENSIONS)];
+    const searchVector = [...testUtils.generateRandomVector(DIMENSIONS)];
 
-    const results = await client!.search(searchVector, 5);
+    const results = await newClient.search(searchVector, 5);
     expect(results).toBeTruthy();
     expect(results).toHaveLength(5);
   });
@@ -210,9 +212,11 @@ describe("TinyVecClient Search", () => {
       },
     ];
 
-    await client!.insert(insertions);
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
 
-    const results = await client!.search<MyMetadataType>(createVector(0), 1);
+    await newClient.insert(insertions);
+
+    const results = await newClient.search<MyMetadataType>(createVector(0), 1);
 
     expect(results[0].metadata).toEqual(insertions[0].metadata);
     expect(typeof results[0].metadata.numeric).toBe("number");
@@ -222,11 +226,12 @@ describe("TinyVecClient Search", () => {
   });
 
   test("should handle multiple searches with different topK", async () => {
-    await insertTestVectors();
+    const newClient = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
+    await insertTestVectors(newClient);
     const searchVector = createVector(5);
 
-    const results1 = await client!.search(searchVector, 3);
-    const results2 = await client!.search(searchVector, 7);
+    const results1 = await newClient.search(searchVector, 3);
+    const results2 = await newClient.search(searchVector, 7);
 
     expect(results1).toHaveLength(3);
     expect(results2).toHaveLength(7);

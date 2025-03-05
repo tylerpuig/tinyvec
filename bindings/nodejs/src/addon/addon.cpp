@@ -676,6 +676,7 @@ namespace
         ConnectionData *connection_data = prepare_data_for_connection(env, info);
         if (!connection_data)
         {
+            std::cout << "Failed to prepare data for connection" << std::endl;
             return nullptr;
         }
 

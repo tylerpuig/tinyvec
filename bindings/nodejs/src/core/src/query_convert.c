@@ -133,17 +133,47 @@ void process_comparison(const char *field_path, const char *op, cJSON *value, St
             return;
         }
 
-        // For arrays like [6], we need to check if 6 is in the document's array field
-        // SQLite doesn't have a direct array contains operator, so we need to use JSON functions
+        int array_size = cJSON_GetArraySize(value);
 
-        // Get the first item to check (assuming simple case of checking one value)
-        cJSON *item = cJSON_GetArrayItem(value, 0);
+        // Open a group for the OR conditions
+        string_buffer_append(buffer, " AND (");
 
-        // Use SQLite's json_each to iterate through the array and check for membership
-        string_buffer_append(buffer, " AND EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
-        string_buffer_append(buffer, field_path);
-        string_buffer_append(buffer, "')) WHERE value = ");
-        append_json_value(buffer, item);
+        // For string values, we need json_extract to return the actual string value
+        // Check if the first item is a string to determine the approach
+        cJSON *first_item = cJSON_GetArrayItem(value, 0);
+        int is_string_comparison = cJSON_IsString(first_item);
+
+        // Loop through all array items and combine with OR
+        for (int i = 0; i < array_size; i++)
+        {
+            cJSON *item = cJSON_GetArrayItem(value, i);
+
+            if (is_string_comparison)
+            {
+                // For strings, use direct comparison with the extracted value
+                string_buffer_append(buffer, "json_extract(metadata, '$.");
+                string_buffer_append(buffer, field_path);
+                string_buffer_append(buffer, "') = ");
+                append_json_value(buffer, item);
+            }
+            else
+            {
+                // For non-strings, use the json_each approach which works better for arrays
+                string_buffer_append(buffer, "EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
+                string_buffer_append(buffer, field_path);
+                string_buffer_append(buffer, "')) WHERE value = ");
+                append_json_value(buffer, item);
+                string_buffer_append(buffer, ")");
+            }
+
+            // Add OR between conditions, except for the last item
+            if (i < array_size - 1)
+            {
+                string_buffer_append(buffer, " OR ");
+            }
+        }
+
+        // Close the group
         string_buffer_append(buffer, ")");
     }
     else if (strcmp(op, "$nin") == 0)
@@ -154,13 +184,47 @@ void process_comparison(const char *field_path, const char *op, cJSON *value, St
             return;
         }
 
-        // Similar to $in but with NOT EXISTS
-        cJSON *item = cJSON_GetArrayItem(value, 0);
+        int array_size = cJSON_GetArraySize(value);
 
-        string_buffer_append(buffer, " AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
-        string_buffer_append(buffer, field_path);
-        string_buffer_append(buffer, "')) WHERE value = ");
-        append_json_value(buffer, item);
+        // Open a group for the AND conditions
+        string_buffer_append(buffer, " AND (");
+
+        // For string values, we need json_extract to return the actual string value
+        // Check if the first item is a string to determine the approach
+        cJSON *first_item = cJSON_GetArrayItem(value, 0);
+        int is_string_comparison = cJSON_IsString(first_item);
+
+        // Loop through all array items and combine with AND
+        for (int i = 0; i < array_size; i++)
+        {
+            cJSON *item = cJSON_GetArrayItem(value, i);
+
+            if (is_string_comparison)
+            {
+                // For strings, use direct comparison with the extracted value
+                string_buffer_append(buffer, "json_extract(metadata, '$.");
+                string_buffer_append(buffer, field_path);
+                string_buffer_append(buffer, "') != ");
+                append_json_value(buffer, item);
+            }
+            else
+            {
+                // For non-strings, use the json_each approach which works better for arrays
+                string_buffer_append(buffer, "NOT EXISTS (SELECT 1 FROM json_each(json_extract(metadata, '$.");
+                string_buffer_append(buffer, field_path);
+                string_buffer_append(buffer, "')) WHERE value = ");
+                append_json_value(buffer, item);
+                string_buffer_append(buffer, ")");
+            }
+
+            // Add AND between conditions, except for the last item
+            if (i < array_size - 1)
+            {
+                string_buffer_append(buffer, " AND ");
+            }
+        }
+
+        // Close the group
         string_buffer_append(buffer, ")");
     }
     else
