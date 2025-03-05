@@ -856,8 +856,6 @@ namespace
             asyncData->ids_to_delete,
             asyncData->delete_count);
 
-        std::cout << "actually_deleted: " << actually_deleted << std::endl;
-
         // asyncData->work = actually_deleted <= 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
         asyncData->actually_deleted_count = actually_deleted;
         asyncData->success = (actually_deleted > 0);
@@ -869,8 +867,6 @@ namespace
 
         // Check if the operation was successful
         bool success = asyncData->work != nullptr;
-
-        std::cout << "success: " << success << std::endl;
 
         // Create result object
         napi_value result_obj;
@@ -997,13 +993,9 @@ namespace
         // Check if the operation was successful
         bool success = asyncData->success;
 
-        std::cout << "success: " << success << std::endl;
-
         // Create result object
         napi_value result_obj;
         napi_create_object(env, &result_obj);
-
-        std::cout << "actual_deleted_count: " << asyncData->actually_deleted_count << std::endl;
 
         // Add count property
         napi_value count_value;

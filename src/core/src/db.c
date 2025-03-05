@@ -416,6 +416,7 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     float *vec_buffer = NULL;
     MinHeap *min_heap = NULL;
     VecResult *sorted = NULL;
+    float *query_vec_norm = NULL;
 
     // Get connection
     connection = get_tinyvec_connection(file_path);
@@ -447,7 +448,12 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
         goto cleanup;
     }
 
-    float *query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
+    query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
+    if (!query_vec_norm)
+    {
+        printf("Failed to normalize query vector\n");
+        goto cleanup;
+    }
 
     for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
     {
@@ -470,13 +476,11 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
         size_t read = fread(vec_buffer, sizeof(float) * (header_info->dimensions + 1), vectors_to_read, connection->vec_file);
         if (read != vectors_to_read)
         {
-
             continue;
         }
 
         for (int j = 0; j < vectors_to_read; j++)
         {
-
             // Get pointer to start of vector+id block
             float *vec_block = vec_buffer + (j * (header_info->dimensions + 1));
 
@@ -513,7 +517,8 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
         free(header_info);
     if (min_heap)
         freeHeap(min_heap);
-    free(query_vec_norm);
+    if (query_vec_norm)
+        free(query_vec_norm);
 
     DBSearchResult *search_result = malloc(sizeof(DBSearchResult));
     search_result->results = sorted;
@@ -521,13 +526,17 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     return search_result;
 
 cleanup:
+    // Fixed cleanup logic: only free sorted metadata if it exists
     if (sorted)
     {
-        for (int i = 0; i < min_heap->size; i++)
+        if (min_heap)
         {
-            if (sorted[i].metadata.data)
+            for (int i = 0; i < min_heap->size; i++)
             {
-                free(sorted[i].metadata.data);
+                if (sorted[i].metadata.data)
+                {
+                    free(sorted[i].metadata.data);
+                }
             }
         }
         free(sorted);
@@ -1131,9 +1140,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         return 0;
     }
 
-    printf("header info->vector_count: %d\n", (int)(header_info->vector_count));
-    printf("header info->dimensions: %d\n", (int)(header_info->dimensions));
-
     int original_vector_count = header_info->vector_count;
 
     // Calculate new vector count (original count minus deleted count)
@@ -1197,7 +1203,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
             // Skip this vector if its ID is in the delete list
             if (binary_search_int(ids_to_delete, delete_count, metadata_id) != -1)
             {
-                printf("Skipping vector with ID %d\n", metadata_id);
                 continue; // Skip this vector
             }
 
@@ -1342,8 +1347,6 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
     free(sql_where);
 
     int delete_count = delete_data_by_ids(connection->file_path, filtered_ids, filtered_count);
-
-    printf("delete count: %d\n", delete_count);
 
     free(filtered_ids);
     return delete_count;
