@@ -81,20 +81,11 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
         return NULL;
     }
 
-    // Get metadata file paths
-    FileMetadataPaths *metadata_paths = get_metadata_file_paths(file_path);
-    if (!metadata_paths)
-    {
-        printf("Failed to get metadata file paths\n");
-        fclose(vec_file);
-        return NULL;
-    }
-
     // Use 1MB buffer for file I/O
     if (setvbuf(vec_file, NULL, _IOFBF, 1024 * 1024) != 0)
     {
         printf("Failed to set vector file buffer\n");
-        free_metadata_file_paths(metadata_paths);
+        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -102,7 +93,7 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     TinyVecConnection *connection = malloc(sizeof(TinyVecConnection));
     if (!connection)
     {
-        free_metadata_file_paths(metadata_paths);
+        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -113,7 +104,7 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     if (!sqlite_path)
     {
         free(header_info);
-        free_metadata_file_paths(metadata_paths);
+        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -124,7 +115,18 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     {
         printf("Failed to open SQLite database: %s\n", sqlite3_errmsg(db));
         sqlite3_close(db);
-        free_metadata_file_paths(metadata_paths);
+        // free_metadata_file_paths(metadata_paths);
+        free(sqlite_path);
+        free(header_info);
+        fclose(vec_file);
+        return NULL;
+    }
+
+    // Create the sqlite tables
+    bool sqlite_table_create = init_sqlite_table(db);
+    if (!sqlite_table_create)
+    {
+        sqlite3_close(db);
         free(sqlite_path);
         free(header_info);
         fclose(vec_file);
@@ -148,7 +150,7 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     {
         free(connection);
         fclose(vec_file);
-        free_metadata_file_paths(metadata_paths);
+        // free_metadata_file_paths(metadata_paths);
         free(header_info);
         return NULL;
     }
@@ -789,115 +791,13 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         return 0;
     }
 
-    // Create metadata table if it doesn't exist
-    char *create_table_sql = "CREATE TABLE IF NOT EXISTS metadata ("
-                             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                             "metadata TEXT,"
-                             "metadata_length INTEGER"
-                             ");";
-
     char *err_msg = NULL;
-    int rc = sqlite3_exec(connection->sqlite_db, create_table_sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK)
-    {
-        printf("SQL error: %s\n", err_msg);
-        sqlite3_free(err_msg);
-        sqlite3_close(connection->sqlite_db);
-        // free(sqlite_path);
-        free(header_info);
-        fclose(vec_file);
-        free(temp_vec_file_path);
-        return 0;
-    }
-
-    // Create index on the id column if it doesn't exist
-    char *create_index_sql = "CREATE INDEX IF NOT EXISTS idx_metadata_id ON metadata(id);";
-    rc = sqlite3_exec(connection->sqlite_db, create_index_sql, 0, 0, &err_msg);
-    if (rc != SQLITE_OK)
-    {
-        printf("Index creation error: %s\n", err_msg);
-        sqlite3_free(err_msg);
-        sqlite3_close(connection->sqlite_db);
-        // free(sqlite_path);
-        free(header_info);
-        fclose(vec_file);
-        free(temp_vec_file_path);
-        return 0;
-    }
-
-    // Begin transaction for better performance
-    rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
-    if (rc != SQLITE_OK)
-    {
-        printf("Transaction start error: %s\n", err_msg);
-        sqlite3_free(err_msg);
-        sqlite3_close(connection->sqlite_db);
-        // free(sqlite_path);
-        free(header_info);
-        fclose(vec_file);
-        free(temp_vec_file_path);
-        return 0;
-    }
+    int rc;
 
     bool reset_dimensions = false;
     if (header_info->dimensions == 0 && header_info->dimensions != dimensions)
     {
         reset_dimensions = true;
-    }
-
-    FileMetadataPaths *md_paths = get_metadata_file_paths(file_path);
-    if (!md_paths)
-    {
-
-        fclose(vec_file);
-        free_metadata_file_paths(md_paths);
-        free(temp_vec_file_path);
-        free(header_info);
-        return 0;
-    }
-
-    char *temp_idx_path = malloc(strlen(md_paths->idx_path) + 6);
-    char *temp_meta_path = malloc(strlen(md_paths->md_path) + 6);
-    sprintf(temp_idx_path, "%s.temp", md_paths->idx_path);
-    sprintf(temp_meta_path, "%s.temp", md_paths->md_path);
-
-    if (!temp_idx_path || !temp_meta_path)
-    {
-        free(temp_idx_path);
-        free(temp_meta_path);
-        free_metadata_file_paths(md_paths);
-        free(temp_vec_file_path);
-        free(header_info);
-        return 0;
-    }
-
-    FILE *idx_file = fopen(temp_idx_path, "ab");
-    FILE *meta_file = fopen(temp_meta_path, "ab");
-
-    if (!idx_file || !meta_file)
-    {
-        if (vec_file)
-        {
-            printf("Failed to open vec file\n");
-            fclose(vec_file);
-        }
-        if (idx_file)
-        {
-            printf("Failed to open idx file\n");
-            fclose(idx_file);
-        }
-        if (meta_file)
-        {
-            printf("Failed to open meta file\n");
-            fclose(meta_file);
-        }
-
-        free(header_info);
-        free_metadata_file_paths(md_paths);
-        free(temp_idx_path);
-        free(temp_meta_path);
-        free(temp_vec_file_path);
-        return 0;
     }
 
     if (connection)
@@ -929,21 +829,10 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         free(vec_buffer);
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
         sqlite3_close(connection->sqlite_db);
-
         fclose(vec_file);
-        fclose(idx_file);
-        fclose(meta_file);
-        free(temp_idx_path);
-        free(temp_meta_path);
         free(temp_vec_file_path);
         return 0;
     }
-
-    // Get starting metadata offset
-    // uint64_t current_meta_offset = ftell(meta_file);
-    fseek(meta_file, 0, SEEK_END);
-    // uint64_t total_meta_size_offset = ftell(meta_file);
-    uint64_t current_meta_offset = ftell(meta_file);
 
     // Fill buffers
     size_t vec_offset = 0;
@@ -1038,13 +927,63 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     free(header_info);
     free(vec_buffer);
     fclose(vec_file);
-    fclose(idx_file);
-    fclose(meta_file);
-    free(temp_idx_path);
-    free(temp_meta_path);
     free(temp_vec_file_path);
 
     return (int)vec_count;
+}
+
+bool init_sqlite_table(sqlite3 *db)
+{
+    // Create metadata table if it doesn't exist
+    char *create_table_sql = "CREATE TABLE IF NOT EXISTS metadata ("
+                             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                             "metadata TEXT,"
+                             "metadata_length INTEGER"
+                             ");";
+
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(db, create_table_sql, 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("SQL error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(db);
+        return false;
+    }
+
+    // Create index on the id column if it doesn't exist
+    char *create_index_sql = "CREATE INDEX IF NOT EXISTS idx_metadata_id ON metadata(id);";
+    rc = sqlite3_exec(db, create_index_sql, 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Index creation error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(db);
+        return false;
+    }
+
+    // Begin transaction for better performance
+    rc = sqlite3_exec(db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Transaction start error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_close(db);
+        return false;
+    }
+
+    // Commit the transaction since we're done with initialization
+    rc = sqlite3_exec(db, "COMMIT;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Transaction commit error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        sqlite3_exec(db, "ROLLBACK;", 0, 0, NULL); // Try to rollback
+        sqlite3_close(db);
+        return false;
+    }
+
+    return true;
 }
 
 size_t calculate_optimal_buffer_size(int dimensions)
@@ -1227,16 +1166,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         fwrite(write_buffer, vec_block_size, write_buffer_count, temp_vec_file);
     }
 
-    // Verify we preserved the expected number of vectors
-    // if (preserved_count != new_vector_count)
-    // {
-    //     printf("Warning: Expected to preserve %d vectors, but actually preserved %d\n",
-    //            new_vector_count, preserved_count);
-    //     // Update the header with the actual count
-    //     // rewind(temp_vec_file);
-    //     fwrite(&preserved_count, sizeof(int), 1, temp_vec_file);
-    // }
-
     // Clean up resources
     free(read_buffer);
     free(write_buffer);
@@ -1328,6 +1257,12 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
     int filtered_count = 0;
 
     char *sql_where = json_query_to_sql(json_filter);
+
+    if (!sql_where)
+    {
+        printf("Failed to convert JSON filter to SQL\n");
+        return 0;
+    }
 
     if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
     {
