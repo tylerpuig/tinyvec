@@ -336,3 +336,185 @@ char *prepare_data_for_index_stats(napi_env env, napi_callback_info info)
 
     return file_path;
 }
+
+AsyncDeleteVectorsByIdData *prepare_data_for_deletion_by_id(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+    AsyncDeleteVectorsByIdData *asyncData = new AsyncDeleteVectorsByIdData;
+    asyncData->file_path = nullptr;
+    asyncData->ids_to_delete = nullptr;
+    asyncData->delete_count = 0;
+
+    // Get arguments
+    size_t argc = 2;
+    napi_value args[2];
+    status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (status != napi_ok)
+    {
+        delete asyncData;
+        return nullptr;
+    }
+
+    // Check argument count
+    if (argc < 2)
+    {
+        napi_throw_error(env, nullptr, "Wrong number of arguments. Expected file path and array of IDs to delete.");
+        delete asyncData;
+        return nullptr;
+    }
+
+    // Get file path
+    size_t file_path_str_size;
+    status = napi_get_value_string_utf8(env, args[0], nullptr, 0, &file_path_str_size);
+    if (status != napi_ok)
+    {
+        napi_throw_error(env, nullptr, "First argument must be a string (file path).");
+        delete asyncData;
+        return nullptr;
+    }
+
+    asyncData->file_path = new char[file_path_str_size + 1];
+    status = napi_get_value_string_utf8(env, args[0], asyncData->file_path, file_path_str_size + 1, nullptr);
+    if (status != napi_ok)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Failed to read file path.");
+        return nullptr;
+    }
+
+    // Check if second argument is an array
+    bool isArray;
+    status = napi_is_array(env, args[1], &isArray);
+    if (status != napi_ok || !isArray)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Second argument must be an array of IDs to delete.");
+        return nullptr;
+    }
+
+    // Get array length
+    uint32_t array_length;
+    status = napi_get_array_length(env, args[1], &array_length);
+    if (status != napi_ok)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Could not get array length.");
+        return nullptr;
+    }
+
+    if (array_length == 0)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "The array of IDs to delete cannot be empty.");
+        return nullptr;
+    }
+
+    // Allocate memory for the IDs
+    asyncData->ids_to_delete = new int[array_length];
+    asyncData->delete_count = array_length;
+
+    // Extract each ID from the array
+    for (uint32_t i = 0; i < array_length; i++)
+    {
+        napi_value element;
+        status = napi_get_element(env, args[1], i, &element);
+        if (status != napi_ok)
+        {
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            napi_throw_error(env, nullptr, "Failed to get array element.");
+            return nullptr;
+        }
+
+        // Convert to integer
+        int id_value;
+        status = napi_get_value_int32(env, element, &id_value);
+        if (status != napi_ok)
+        {
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            napi_throw_error(env, nullptr, "Array elements must be integers.");
+            return nullptr;
+        }
+
+        asyncData->ids_to_delete[i] = id_value;
+    }
+
+    return asyncData;
+}
+
+AsyncDeleteVectorsByFilterData *prepare_data_for_deletion_by_filter(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+    AsyncDeleteVectorsByFilterData *asyncData = new AsyncDeleteVectorsByFilterData;
+    asyncData->file_path = nullptr;
+    asyncData->json_filter = nullptr;
+
+    // Get arguments
+    size_t argc = 2;
+    napi_value args[2];
+    status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (status != napi_ok)
+    {
+        delete asyncData;
+        return nullptr;
+    }
+
+    // Check argument count
+    if (argc < 2)
+    {
+        napi_throw_error(env, nullptr, "Wrong number of arguments. Expected file path and array of IDs to delete.");
+        delete asyncData;
+        return nullptr;
+    }
+
+    // Get file path
+    size_t file_path_str_size;
+    status = napi_get_value_string_utf8(env, args[0], nullptr, 0, &file_path_str_size);
+    if (status != napi_ok)
+    {
+        napi_throw_error(env, nullptr, "First argument must be a string (file path).");
+        delete asyncData;
+        return nullptr;
+    }
+
+    asyncData->file_path = new char[file_path_str_size + 1];
+    status = napi_get_value_string_utf8(env, args[0], asyncData->file_path, file_path_str_size + 1, nullptr);
+    if (status != napi_ok)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Failed to read file path.");
+        return nullptr;
+    }
+
+    // Get JSON filter
+    size_t json_filter_str_size;
+    status = napi_get_value_string_utf8(env, args[1], nullptr, 0, &json_filter_str_size);
+    if (status != napi_ok)
+    {
+        delete[] asyncData->file_path;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Second argument must be a string (JSON filter).");
+        return nullptr;
+    }
+
+    asyncData->json_filter = new char[json_filter_str_size + 1];
+    status = napi_get_value_string_utf8(env, args[1], asyncData->json_filter, json_filter_str_size + 1, nullptr);
+    if (status != napi_ok)
+    {
+        delete[] asyncData->file_path;
+        delete[] asyncData->json_filter;
+        delete asyncData;
+        napi_throw_error(env, nullptr, "Failed to read JSON filter.");
+        return nullptr;
+    }
+
+    return asyncData;
+}

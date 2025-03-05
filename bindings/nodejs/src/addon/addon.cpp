@@ -24,6 +24,7 @@ namespace
         int top_k;
         char *file_path;
         char *metadata_filters;
+        int returned_results;
         std::vector<SearchResult> results;
         napi_deferred deferred;
         napi_async_work work;
@@ -54,41 +55,62 @@ namespace
     void ExecuteSearch(napi_env env, void *data)
     {
         AsyncSearchData *searchData = static_cast<AsyncSearchData *>(data);
+
         try
         {
             std::vector<SearchResult> result_vec;
 
-            // Use unique_ptr with custom deleter for DBSearchResult
-            std::unique_ptr<DBSearchResult, void (*)(DBSearchResult *)> search_result(nullptr,
-                                                                                      [](DBSearchResult *ptr)
-                                                                                      {
-                                                                                          if (ptr)
-                                                                                          {
-                                                                                              // Free individual metadata if needed
-                                                                                              if (ptr->results)
-                                                                                              {
-                                                                                                  for (int i = 0; i < ptr->count; i++)
-                                                                                                  {
-                                                                                                      free(ptr->results[i].metadata.data);
-                                                                                                  }
-                                                                                                  free(ptr->results);
-                                                                                              }
-                                                                                              free(ptr);
-                                                                                          }
-                                                                                      });
+            // First, call the function directly without using unique_ptr
+            DBSearchResult *raw_result = nullptr;
 
             if (searchData->metadata_filters)
             {
-                // Get the top-k results with filter
-                search_result.reset(vector_query_with_filter(searchData->file_path, searchData->query_vec, searchData->top_k, searchData->metadata_filters));
+                raw_result = vector_query_with_filter(
+                    searchData->file_path,
+                    searchData->query_vec,
+                    searchData->top_k,
+                    searchData->metadata_filters);
             }
             else
             {
-                // Get the top-k results without filter
-                search_result.reset(vector_query(searchData->file_path, searchData->query_vec, searchData->top_k));
+                raw_result = vector_query(
+                    searchData->file_path,
+                    searchData->query_vec,
+                    searchData->top_k);
             }
 
-            if (!search_result || !search_result->results || search_result->count <= 0)
+            // Handle NULL result
+            if (raw_result == nullptr)
+            {
+                searchData->results = std::vector<SearchResult>();
+                return;
+            }
+
+            // If raw_result is valid - now wrap it in unique_ptr for automatic cleanup
+            std::unique_ptr<DBSearchResult, void (*)(DBSearchResult *)> search_result(
+                raw_result,
+                [](DBSearchResult *ptr)
+                {
+                    if (ptr)
+                    {
+                        // Free metadata for each result
+                        if (ptr->results)
+                        {
+                            for (int i = 0; i < ptr->count; i++)
+                            {
+                                if (ptr->results[i].metadata.data)
+                                {
+                                    free(ptr->results[i].metadata.data);
+                                }
+                            }
+                            free(ptr->results);
+                        }
+                        free(ptr);
+                    }
+                });
+
+            // Check for empty results array
+            if (!search_result->results || search_result->count <= 0)
             {
                 searchData->results = std::vector<SearchResult>();
                 return;
@@ -110,13 +132,15 @@ namespace
 
             searchData->results = std::move(result_vec);
         }
+        catch (const std::exception &)
+        {
+            searchData->results.clear();
+        }
         catch (...)
         {
-            // Handle errors in complete callback
             searchData->results.clear();
         }
     }
-
     // Complete callback (runs in main thread)
     void CompleteSearch(napi_env env, napi_status status, void *data)
     {
@@ -822,11 +846,287 @@ namespace
         }
     }
 
+    void ExecuteDeleteVectorsById(napi_env env, void *data)
+    {
+        AsyncDeleteVectorsByIdData *asyncData = static_cast<AsyncDeleteVectorsByIdData *>(data);
+
+        int actually_deleted = delete_vecs_by_ids(
+            asyncData->file_path,
+            asyncData->ids_to_delete,
+            asyncData->delete_count);
+
+        asyncData->work = actually_deleted > 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
+        asyncData->actually_deleted_count = actually_deleted;
+    }
+
+    void CompleteDeleteVectorsById(napi_env env, napi_status status, void *data)
+    {
+        AsyncDeleteVectorsByIdData *asyncData = static_cast<AsyncDeleteVectorsByIdData *>(data);
+
+        // Check if the operation was successful
+        bool success = asyncData->work == nullptr;
+
+        if (status != napi_ok || !success)
+        {
+            // Create error object
+            napi_value error_msg, error_obj;
+            napi_create_string_utf8(env, "Failed to delete vectors by IDs", NAPI_AUTO_LENGTH, &error_msg);
+            napi_create_error(env, nullptr, error_msg, &error_obj);
+
+            // Reject the promise
+            napi_reject_deferred(env, asyncData->deferred, error_obj);
+        }
+        else
+        {
+            // Create result object
+            napi_value result_obj;
+            napi_create_object(env, &result_obj);
+
+            // Add count property
+            napi_value count_value;
+            napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
+            napi_set_named_property(env, result_obj, "deletedCount", count_value);
+
+            // Add success property
+            napi_value success_value;
+            napi_get_boolean(env, true, &success_value);
+            napi_set_named_property(env, result_obj, "success", success_value);
+
+            // Resolve the promise
+            napi_resolve_deferred(env, asyncData->deferred, result_obj);
+        }
+
+        // Clean up
+        napi_delete_async_work(env, asyncData->work);
+        delete[] asyncData->file_path;
+        delete[] asyncData->ids_to_delete;
+        delete asyncData;
+    }
+
+    napi_value DeleteVectorsById(napi_env env, napi_callback_info info)
+    {
+        napi_status status;
+
+        // Prepare the data for deletion
+        AsyncDeleteVectorsByIdData *asyncData = prepare_data_for_deletion_by_id(env, info);
+        if (!asyncData)
+        {
+            return nullptr;
+        }
+
+        // Create promise
+        napi_value promise;
+        status = napi_create_promise(env, &asyncData->deferred, &promise);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create promise", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Create async work name
+        napi_value resource_name;
+        status = napi_create_string_utf8(env, "DeleteVectorsById", NAPI_AUTO_LENGTH, &resource_name);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create resource name", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Create async work
+        status = napi_create_async_work(
+            env,
+            nullptr,
+            resource_name,
+            ExecuteDeleteVectorsById,
+            CompleteDeleteVectorsById,
+            asyncData,
+            &asyncData->work);
+
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Queue the work
+        status = napi_queue_async_work(env, asyncData->work);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to queue async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            napi_delete_async_work(env, asyncData->work);
+            delete[] asyncData->file_path;
+            delete[] asyncData->ids_to_delete;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Return the promise
+        return promise;
+    }
+
+    void ExecuteDeleteVectorsByFilter(napi_env env, void *data)
+    {
+        AsyncDeleteVectorsByFilterData *asyncData = static_cast<AsyncDeleteVectorsByFilterData *>(data);
+
+        int actually_deleted = delete_vecs_by_filter(
+            asyncData->file_path, asyncData->json_filter);
+
+        asyncData->work = actually_deleted > 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
+        asyncData->actually_deleted_count = actually_deleted;
+    }
+
+    void CompleteDeleteVectorsByFilter(napi_env env, napi_status status, void *data)
+    {
+        AsyncDeleteVectorsByFilterData *asyncData = static_cast<AsyncDeleteVectorsByFilterData *>(data);
+
+        // Check if the operation was successful
+        bool success = asyncData->work == nullptr;
+
+        if (status != napi_ok || !success)
+        {
+            // Create error object
+            napi_value error_msg, error_obj;
+            napi_create_string_utf8(env, "Failed to delete vectors by filter", NAPI_AUTO_LENGTH, &error_msg);
+            napi_create_error(env, nullptr, error_msg, &error_obj);
+
+            // Reject the promise
+            napi_reject_deferred(env, asyncData->deferred, error_obj);
+        }
+        else
+        {
+            // Create result object
+            napi_value result_obj;
+            napi_create_object(env, &result_obj);
+
+            // Add count property
+            napi_value count_value;
+            napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
+            napi_set_named_property(env, result_obj, "deletedCount", count_value);
+
+            // Add success property
+            napi_value success_value;
+            napi_get_boolean(env, true, &success_value);
+            napi_set_named_property(env, result_obj, "success", success_value);
+
+            // Resolve the promise
+            napi_resolve_deferred(env, asyncData->deferred, result_obj);
+        }
+
+        // Clean up
+        napi_delete_async_work(env, asyncData->work);
+        delete[] asyncData->file_path;
+        delete[] asyncData->json_filter;
+        delete asyncData;
+    }
+
+    napi_value DeleteVectorsByFilter(napi_env env, napi_callback_info info)
+    {
+        napi_status status;
+
+        // Prepare the data for deletion
+        AsyncDeleteVectorsByFilterData *asyncData = prepare_data_for_deletion_by_filter(env, info);
+        if (!asyncData)
+        {
+            return nullptr;
+        }
+
+        // Create promise
+        napi_value promise;
+        status = napi_create_promise(env, &asyncData->deferred, &promise);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create promise", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->json_filter;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Create async work name
+        napi_value resource_name;
+        status = napi_create_string_utf8(env, "DeleteVectorsByFilter", NAPI_AUTO_LENGTH, &resource_name);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create resource name", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->json_filter;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Create async work
+        status = napi_create_async_work(
+            env,
+            nullptr,
+            resource_name,
+            ExecuteDeleteVectorsByFilter,
+            CompleteDeleteVectorsByFilter,
+            asyncData,
+            &asyncData->work);
+
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            delete[] asyncData->file_path;
+            delete[] asyncData->json_filter;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Queue the work
+        status = napi_queue_async_work(env, asyncData->work);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to queue async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            napi_delete_async_work(env, asyncData->work);
+            delete[] asyncData->file_path;
+            delete[] asyncData->json_filter;
+            delete asyncData;
+            return nullptr;
+        }
+
+        // Return the promise
+        return promise;
+    }
+
     napi_value
     Init(napi_env env, napi_value exports)
     {
         napi_status status;
-        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateDbFileConnectionFn;
+        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateDbFileConnectionFn, deleteVectorsByIdFn, deleteVectorsByFilterFn;
 
         // Create search function
         status = napi_create_function(env, nullptr, 0, Search, nullptr, &searchFn);
@@ -849,6 +1149,13 @@ namespace
         if (status != napi_ok)
             return nullptr;
 
+        status = napi_create_function(env, nullptr, 0, DeleteVectorsById, nullptr, &deleteVectorsByIdFn);
+        if (status != napi_ok)
+            return nullptr;
+        status = napi_create_function(env, nullptr, 0, DeleteVectorsByFilter, nullptr, &deleteVectorsByFilterFn);
+        if (status != napi_ok)
+            return nullptr;
+
         // Add both functions to exports
         status = napi_set_named_property(env, exports, "search", searchFn);
         if (status != napi_ok)
@@ -867,6 +1174,14 @@ namespace
             return nullptr;
 
         status = napi_set_named_property(env, exports, "updateDbFileConnection", updateDbFileConnectionFn);
+        if (status != napi_ok)
+            return nullptr;
+
+        status = napi_set_named_property(env, exports, "deleteByIds", deleteVectorsByIdFn);
+        if (status != napi_ok)
+            return nullptr;
+
+        status = napi_set_named_property(env, exports, "deleteByFilter", deleteVectorsByFilterFn);
         if (status != napi_ok)
             return nullptr;
 
