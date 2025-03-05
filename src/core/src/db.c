@@ -808,10 +808,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         return 0;
     }
 
-    char *err_msg = NULL;
-    int rc;
-
-    bool reset_dimensions = false;
+        bool reset_dimensions = false;
     if (header_info->dimensions == 0 && header_info->dimensions != dimensions)
     {
         reset_dimensions = true;
@@ -836,6 +833,9 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     {
         total_meta_size += metadata_lengths[i];
     }
+
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
 
     // Allocate buffers
     unsigned char *vec_buffer = malloc(total_vec_size);
