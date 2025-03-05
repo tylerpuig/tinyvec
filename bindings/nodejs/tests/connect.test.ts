@@ -2,7 +2,7 @@ import { TinyVecClient } from "../src/index";
 import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
-import { generateRandomVector } from "./utils";
+import * as testUtils from "./utils";
 
 describe("TinyVecClient Connect", () => {
   let tempDir: string;
@@ -13,9 +13,9 @@ describe("TinyVecClient Connect", () => {
     // Create main temp directory if it doesn't exist
     await fs.mkdir("temp").catch(() => {});
 
-    // Create a temporary directory for each test inside 'temp'
-    const randInt = Math.floor(Math.random() * 1000000);
-    tempDir = path.join("temp", `test-${Date.now()}-${randInt}`);
+    const hash = testUtils.createRandomMD5Hash();
+    tempDir = path.join("temp", hash);
+
     await fs.mkdir(tempDir);
 
     dbPath = path.join(tempDir, "test.db");
@@ -99,7 +99,7 @@ describe("TinyVecClient Connect", () => {
 
     const insertions: TinyVecInsertion[] = [
       {
-        vector: generateRandomVector(128),
+        vector: testUtils.generateRandomVector(128),
         metadata: { id: 1 },
       },
     ];

@@ -7,12 +7,13 @@ const DIMENSIONS = 128;
 describe("TinyVecClient Filter Operations", () => {
   let tempDir: string;
 
-  beforeEach(async () => {
-    // Create main temp directory if it doesn't exist
+  beforeAll(async () => {
     await fs.mkdir("temp").catch(() => {});
+  });
 
-    // Create a temporary directory for each test inside 'temp'
-    tempDir = path.join("temp", `test-${Date.now()}`);
+  beforeEach(async () => {
+    const hash = testUtils.createRandomMD5Hash();
+    tempDir = path.join("temp", hash);
     await fs.mkdir(tempDir);
   });
 
@@ -395,7 +396,7 @@ function createVector(baseValue: number): Float32Array {
   return testUtils.normalizeVector(vector);
 }
 
-type TestMetadata = {
+export type TestMetadata = {
   id: number;
   brand: string;
   model: string;
@@ -412,7 +413,7 @@ type TestMetadata = {
 };
 
 // Helper to prepare test data with rich metadata for filtering
-async function insertTestVectors(client: TinyVecClient) {
+export async function insertTestVectors(client: TinyVecClient) {
   const testData: TestMetadata[] = [
     {
       id: 0,

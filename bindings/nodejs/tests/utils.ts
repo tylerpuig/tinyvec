@@ -1,5 +1,6 @@
 import { TinyVecClient } from "../src/index";
 import path from "path";
+import crypto from "crypto";
 
 export function generateRandomVector(dimensions: number) {
   const vector = new Float32Array(dimensions);
@@ -26,4 +27,14 @@ export function normalizeVector(vector: Float32Array) {
     vector[i] = vector[i] / (norm + epsilon);
   }
   return vector;
+}
+
+export function createRandomMD5Hash(): string {
+  // Generate random data to hash
+  const randomBytes = crypto.randomBytes(32); // Generate 32 random bytes
+
+  // Create the MD5 hash
+  const hash = crypto.createHash("md5");
+  hash.update(randomBytes);
+  return hash.digest("hex");
 }

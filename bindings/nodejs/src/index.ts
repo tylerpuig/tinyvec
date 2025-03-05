@@ -140,7 +140,6 @@ class TinyVecClient {
       }
 
       // Rename of temp file to original
-
       await fsPromises.rename(tempFilePath, this.filePath);
 
       // Update DB file connection
@@ -163,7 +162,6 @@ class TinyVecClient {
     let tempFilePath = `${this.filePath}.temp`;
     try {
       // first copy the vector file to a temp file
-
       const indexStats = await nativeGetIndexStats(this.filePath);
       if (!indexStats || !indexStats.vectors) {
         return { deletedCount: 0, success: false };
@@ -186,7 +184,7 @@ class TinyVecClient {
       throw error;
     } finally {
       // Clean up temp files regardless of success or failure
-      // await fsPromises.unlink(tempFilePath).catch(() => {});
+      await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 
@@ -246,7 +244,6 @@ class TinyVecClient {
 }
 
 export { TinyVecClient };
-// export * from "./types";
 export type {
   TinyVecInsertion,
   TinyVecSearchResult,

@@ -8,12 +8,13 @@ describe("TinyVecClient Insert", () => {
   let tempDir: string;
   let dbPath: string;
 
-  beforeEach(async () => {
-    // Create main temp directory if it doesn't exist
+  beforeAll(async () => {
     await fs.mkdir("temp").catch(() => {});
+  });
 
-    // Create a temporary directory for each test inside 'temp'
-    tempDir = path.join("temp", `test-${Date.now()}`);
+  beforeEach(async () => {
+    const hash = testUtils.createRandomMD5Hash();
+    tempDir = path.join("temp", hash);
     await fs.mkdir(tempDir);
 
     dbPath = path.join(tempDir, "test.db");
