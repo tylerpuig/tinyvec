@@ -16,6 +16,10 @@ const nativeGetIndexStats =
   nativeModule.getIndexStats as tinyvecTypes.NativeGetIndexStatsFunction;
 const nativeUpdateDbFileConnection =
   nativeModule.updateDbFileConnection as tinyvecTypes.NativeUpdateDbFileConnectionFunction;
+const nativeDeleteVectorsByIds =
+  nativeModule.deleteByIds as tinyvecTypes.DeleteVectorsByIdsFunction;
+const nativeDeleteVectorsByFilter =
+  nativeModule.deleteByFilter as tinyvecTypes.DeleteVectorsByFilterFunction;
 
 class TinyVecClient {
   private filePath: string;
@@ -180,6 +184,64 @@ class TinyVecClient {
         fsPromises.unlink(tempFiles.idx).catch(() => {}),
         fsPromises.unlink(tempFiles.meta).catch(() => {}),
       ]);
+    }
+  }
+
+  async deleteByIds(ids: number[]): Promise<tinyvecTypes.DeletionResult> {
+    if (!ids || !ids.length) {
+      throw new Error("No IDs provided");
+    }
+    let tempFilePath = `${this.filePath}.temp`;
+    try {
+      // first copy the vector file to a temp file
+      await fsPromises.copyFile(this.filePath, tempFilePath);
+      const deletionResult = await nativeDeleteVectorsByIds(this.filePath, ids);
+
+      await fsPromises.rename(tempFilePath, this.filePath);
+
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
+
+      return deletionResult;
+    } catch (error) {
+      throw error;
+    } finally {
+      // Clean up temp files regardless of success or failure
+      await fsPromises.unlink(tempFilePath).catch(() => {});
+    }
+  }
+
+  async deleteByFilter(
+    options: tinyvecTypes.DeleteByFilterOptions
+  ): Promise<tinyvecTypes.DeletionResult> {
+    if (!options) {
+      throw new Error("No options provided");
+    }
+
+    if (!options.filter) {
+      throw new Error("No filter provided");
+    }
+    let tempFilePath = `${this.filePath}.temp`;
+    try {
+      // first copy the vector file to a temp file
+      await fsPromises.copyFile(this.filePath, tempFilePath);
+      const filerStr = JSON.stringify(options.filter);
+      const deletionResult = await nativeDeleteVectorsByFilter(
+        this.filePath,
+        filerStr
+      );
+
+      await fsPromises.rename(tempFilePath, this.filePath);
+
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
+
+      return deletionResult;
+    } catch (error) {
+      throw error;
+    } finally {
+      // Clean up temp files regardless of success or failure
+      await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 

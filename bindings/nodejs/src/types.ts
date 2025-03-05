@@ -12,6 +12,16 @@ export type NativeInsertFunction = (
   dimensions: number
 ) => Promise<number>;
 
+export type DeleteVectorsByIdsFunction = (
+  filePath: string,
+  ids: number[]
+) => Promise<DeletionResult>;
+
+export type DeleteVectorsByFilterFunction = (
+  filePath: string,
+  jsonFilter: string
+) => Promise<DeletionResult>;
+
 export type NativeConnectFunction = (
   filePath: string,
   config?: TinyVecConfig
@@ -29,6 +39,15 @@ export type TinyVecSearchResult<TMeta = any> = {
   index: number;
   similarity: number;
   metadata: TMeta;
+};
+
+export type DeletionResult = {
+  deletedCount: number;
+  success: boolean;
+};
+
+export type DeleteByFilterOptions = {
+  filter: Record<string, any>;
 };
 
 export type IndexFileStats = {
