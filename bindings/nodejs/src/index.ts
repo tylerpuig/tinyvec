@@ -57,16 +57,6 @@ class TinyVecClient {
       // Force flush to disk
       fs.fsyncSync(fd);
       fs.closeSync(fd);
-
-      // These are now deprecated
-      // Create empty metadata files
-      // const idxFd = fs.openSync(absolutePath + ".idx", "wx");
-      // const metaFd = fs.openSync(absolutePath + ".meta", "wx");
-      // // Force flush these
-      // fs.fsyncSync(idxFd);
-      // fs.fsyncSync(metaFd);
-      // fs.closeSync(idxFd);
-      // fs.closeSync(metaFd);
     }
     nativeConnect(absolutePath, config);
     return new TinyVecClient(absolutePath, config);
@@ -168,7 +158,7 @@ class TinyVecClient {
 
   async deleteByIds(ids: number[]): Promise<tinyvecTypes.DeletionResult> {
     if (!ids || !ids.length) {
-      throw new Error("No IDs provided");
+      return { deletedCount: 0, success: false };
     }
     let tempFilePath = `${this.filePath}.temp`;
     try {
