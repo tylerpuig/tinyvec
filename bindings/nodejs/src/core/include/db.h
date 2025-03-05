@@ -47,6 +47,8 @@ extern "C"
     EXPORT IndexFileStats get_index_stats(const char *file_path);
     EXPORT DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const int top_k);
     EXPORT DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter);
+    EXPORT int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_count);
+    EXPORT int delete_data_by_filter(const char *file_path, const char *json_filter);
     EXPORT int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                            const size_t vec_count, const uint32_t dimensions);
     EXPORT bool update_db_file_connection(const char *file_path);

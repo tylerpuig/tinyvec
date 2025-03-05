@@ -287,7 +287,8 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     // If no results match the filter, return empty result
     if (filtered_count == 0)
     {
-        goto cleanup;
+        printf("No results match the filter\n");
+        return NULL;
     }
 
     // Sort the IDs for binary search later
@@ -372,7 +373,8 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
         free(header_info);
     if (min_heap)
         freeHeap(min_heap);
-    free(query_vec_norm);
+    if (query_vec_norm)
+        free(query_vec_norm);
 
     DBSearchResult *search_result = malloc(sizeof(DBSearchResult));
     search_result->results = sorted;
@@ -382,7 +384,7 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
 cleanup:
     if (filtered_ids)
         free(filtered_ids);
-    if (sorted)
+    if (min_heap && sorted)
     {
         for (int i = 0; i < min_heap->size; i++)
         {
@@ -391,10 +393,12 @@ cleanup:
                 free(sorted[i].metadata.data);
             }
         }
-        free(sorted);
+        if (sorted)
+            free(sorted);
     }
 
-    free(query_vec_norm);
+    if (query_vec_norm)
+        free(query_vec_norm);
     if (vec_buffer)
         aligned_free(vec_buffer);
     if (header_info)
@@ -898,7 +902,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     size_t vec_size_with_id = (dimensions + 1) * sizeof(float);
     // Now calculate total vector size using dimensions
-    // size_t total_vec_size = vec_count * header_info->dimensions * sizeof(float);
     size_t total_vec_size = vec_count * vec_size_with_id;
 
     // Calculate total sizes needed
@@ -910,8 +913,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     // Allocate buffers
     unsigned char *vec_buffer = malloc(total_vec_size);
-    // unsigned char *idx_buffer = malloc(vec_count * 12); // 12 bytes per index entry
-    // unsigned char *meta_buffer = malloc(total_meta_size);
 
     if (!vec_buffer)
     {
@@ -919,8 +920,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         free(vec_buffer);
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
         sqlite3_close(connection->sqlite_db);
-        // free(idx_buffer);
-        // free(meta_buffer);
+
         fclose(vec_file);
         fclose(idx_file);
         fclose(meta_file);
@@ -995,20 +995,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
         sqlite3_reset(stmt);
         sqlite3_clear_bindings(stmt);
-
-        // Write index entry (offset + length)
-        // uint64_t meta_pos = current_meta_offset + meta_offset;
-        // uint32_t meta_len = metadata_lengths[i];
-
-        // memcpy(idx_buffer + idx_offset, &meta_pos, sizeof(uint64_t));
-        // memcpy(idx_buffer + idx_offset + 8, &meta_len, sizeof(uint32_t));
-        // idx_offset += 12;
-
-        // memcpy(meta_buffer + meta_offset,
-        //        metadatas[i],
-        //        metadata_lengths[i]);
-
-        // meta_offset += metadata_lengths[i];
     }
 
     // Finalize statement
@@ -1024,8 +1010,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
 
     // Single write for each file
     fwrite(vec_buffer, 1, total_vec_size, vec_file);
-    // fwrite(idx_buffer, 1, vec_count * 12, idx_file);
-    // fwrite(meta_buffer, 1, total_meta_size, meta_file);
 
     // Position at start of file
     fseek(vec_file, 0, SEEK_SET);
@@ -1044,8 +1028,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     // Cleanup
     free(header_info);
     free(vec_buffer);
-    // free(idx_buffer);
-    // free(meta_buffer);
     fclose(vec_file);
     fclose(idx_file);
     fclose(meta_file);
@@ -1106,4 +1088,245 @@ bool update_db_file_connection(const char *file_path)
     connection->vec_file = vec_file;
 
     return true;
+}
+
+int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_count)
+{
+    if (!file_path || !ids_to_delete || delete_count <= 0)
+    {
+        return 0;
+    }
+
+    // Sort the IDs for faster lookup using binary search
+    qsort(ids_to_delete, delete_count, sizeof(int), compare_ints);
+
+    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    if (!connection || !connection->sqlite_db || !connection->vec_file)
+    {
+        return 0;
+    }
+
+    // Create temporary file paths
+    char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
+    if (!temp_vec_file_path)
+    {
+        return 0;
+    }
+    sprintf(temp_vec_file_path, "%s.temp", file_path);
+
+    // Open temporary vector file for writing
+    FILE *temp_vec_file = fopen(temp_vec_file_path, "wb");
+    if (!temp_vec_file)
+    {
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    // Get header info from the original file
+    // Note: We need to rewind the file pointer first
+    rewind(connection->vec_file);
+    VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, 0);
+    if (!header_info)
+    {
+        fclose(temp_vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    int original_vector_count = header_info->vector_count;
+
+    // Calculate new vector count (original count minus deleted count)
+    int new_vector_count = original_vector_count - delete_count;
+
+    // Write the new header to the temp file
+    fwrite(&new_vector_count, sizeof(int), 1, temp_vec_file);
+    fwrite(&header_info->dimensions, sizeof(uint32_t), 1, temp_vec_file);
+
+    // Define buffer size (in number of vectors) and allocate buffer
+    const int BUFFER_SIZE = 1024; // Adjust as needed for memory constraints
+    const size_t vec_block_size = sizeof(float) * (header_info->dimensions + 1);
+    const size_t buffer_size_bytes = vec_block_size * BUFFER_SIZE;
+
+    float *read_buffer = malloc(buffer_size_bytes);
+    float *write_buffer = malloc(buffer_size_bytes);
+    if (!read_buffer || !write_buffer)
+    {
+        if (read_buffer)
+            free(read_buffer);
+        if (write_buffer)
+            free(write_buffer);
+        free(header_info);
+        fclose(temp_vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
+
+    // Start after the header in the original file
+    // Position file pointer at the beginning of vector data
+    // (header_info already moved the file pointer past the header)
+
+    // Track how many vectors we've preserved
+    int preserved_count = 0;
+    int write_buffer_count = 0; // Count of vectors in the write buffer
+
+    // Process the file in chunks
+    for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
+    {
+        // Calculate how many vectors to read in this chunk
+        int vectors_to_read = fmin(BUFFER_SIZE, header_info->vector_count - i);
+
+        // Read a chunk of vectors
+        size_t read = fread(read_buffer, vec_block_size, vectors_to_read, connection->vec_file);
+        if (read != vectors_to_read)
+        {
+            printf("Failed to read expected number of vectors: expected %d, got %zu\n",
+                   vectors_to_read, read);
+            break; // Or handle the error as appropriate
+        }
+
+        // Process each vector in the read buffer
+        for (int j = 0; j < vectors_to_read; j++)
+        {
+            // Get pointer to start of vector+id block
+            float *vec_block = read_buffer + (j * (header_info->dimensions + 1));
+
+            // Extract metadata ID from first float
+            int metadata_id = (int)vec_block[0];
+
+            // Skip this vector if its ID is in the delete list
+            if (binary_search_int(ids_to_delete, delete_count, metadata_id) != -1)
+            {
+                continue; // Skip this vector
+            }
+
+            // Keep this vector: copy it to the write buffer
+            memcpy(write_buffer + (write_buffer_count * (header_info->dimensions + 1)),
+                   vec_block, vec_block_size);
+            write_buffer_count++;
+            preserved_count++;
+
+            // If write buffer is full, write it to the temp file
+            if (write_buffer_count >= BUFFER_SIZE)
+            {
+                fwrite(write_buffer, vec_block_size, write_buffer_count, temp_vec_file);
+                write_buffer_count = 0; // Reset buffer counter
+            }
+        }
+    }
+
+    // Write any remaining vectors in the write buffer
+    if (write_buffer_count > 0)
+    {
+        fwrite(write_buffer, vec_block_size, write_buffer_count, temp_vec_file);
+    }
+
+    // Verify we preserved the expected number of vectors
+    if (preserved_count != new_vector_count)
+    {
+        printf("Warning: Expected to preserve %d vectors, but actually preserved %d\n",
+               new_vector_count, preserved_count);
+        // Update the header with the actual count
+        rewind(temp_vec_file);
+        fwrite(&preserved_count, sizeof(int), 1, temp_vec_file);
+    }
+
+    // Clean up resources
+    free(read_buffer);
+    free(write_buffer);
+
+    int vectors_actually_removed = original_vector_count - preserved_count;
+
+    fclose(connection->vec_file);
+
+    // Delete the metadata from the SQLite database in batches
+    const int BATCH_SIZE = 500;
+    char *err_msg = NULL;
+    int rc = SQLITE_OK;
+
+    // Begin transaction for better performance
+    rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to begin transaction: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        goto cleanup;
+    }
+
+    // Process deletions in batches
+    for (int batch_start = 0; batch_start < delete_count; batch_start += BATCH_SIZE)
+    {
+        int batch_end = batch_start + BATCH_SIZE;
+        if (batch_end > delete_count)
+            batch_end = delete_count;
+        int batch_size = batch_end - batch_start;
+
+        // Create the SQL for this batch
+        char *sql = sqlite3_mprintf("DELETE FROM metadata WHERE id IN (");
+        for (int i = batch_start; i < batch_end; i++)
+        {
+            char *temp = sqlite3_mprintf("%s%d%s", sql, ids_to_delete[i],
+                                         (i < batch_end - 1) ? "," : ")");
+            sqlite3_free(sql);
+            sql = temp;
+        }
+
+        // Execute the deletion for this batch
+        rc = sqlite3_exec(connection->sqlite_db, sql, 0, 0, &err_msg);
+        if (rc != SQLITE_OK)
+        {
+            printf("SQL error when deleting metadata batch %d-%d: %s\n",
+                   batch_start, batch_end - 1, err_msg);
+            sqlite3_free(err_msg);
+            // Continue with other batches even if this one failed
+        }
+
+        sqlite3_free(sql);
+    }
+
+    // Commit the transaction
+    rc = sqlite3_exec(connection->sqlite_db, "COMMIT;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Failed to commit transaction: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        // Try to rollback
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
+    }
+
+cleanup:
+    // Clean up remaining resources
+    free(header_info);
+    fclose(temp_vec_file);
+    free(temp_vec_file_path);
+
+    return vectors_actually_removed;
+}
+
+int delete_data_by_filter(const char *file_path, const char *json_filter)
+{
+
+    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    if (!connection || !connection->sqlite_db)
+    {
+        return 0;
+    }
+
+    int *filtered_ids = NULL;
+    int filtered_count = 0;
+
+    char *sql_where = json_query_to_sql(json_filter);
+
+    if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
+    {
+        printf("Failed to get filtered IDs\n");
+        free(sql_where);
+        return 0;
+    }
+
+    free(sql_where);
+
+    int delete_count = delete_data_by_ids(connection->file_path, filtered_ids, filtered_count);
+
+    free(filtered_ids);
+    return delete_count;
 }
