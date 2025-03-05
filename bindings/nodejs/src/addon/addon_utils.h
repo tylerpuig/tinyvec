@@ -24,6 +24,7 @@ struct AsyncDeleteVectorsByIdData
     int *ids_to_delete;
     int delete_count;
     int actually_deleted_count;
+    bool success;
     napi_deferred deferred;
     napi_async_work work;
 };
@@ -33,6 +34,7 @@ struct AsyncDeleteVectorsByFilterData
     char *file_path;
     char *json_filter;
     int actually_deleted_count;
+    bool success;
     napi_deferred deferred;
     napi_async_work work;
 };

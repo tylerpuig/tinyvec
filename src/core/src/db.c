@@ -1115,17 +1115,15 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     sprintf(temp_vec_file_path, "%s.temp", file_path);
 
     // Open temporary vector file for writing
-    FILE *temp_vec_file = fopen(temp_vec_file_path, "wb");
+    FILE *temp_vec_file = open_db_file(temp_vec_file_path);
     if (!temp_vec_file)
     {
         free(temp_vec_file_path);
         return 0;
     }
 
-    // Get header info from the original file
-    // Note: We need to rewind the file pointer first
-    rewind(connection->vec_file);
-    VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, 0);
+    // Get header info from file
+    VecFileHeaderInfo *header_info = get_vec_file_header_info(temp_vec_file, 0);
     if (!header_info)
     {
         fclose(temp_vec_file);
@@ -1133,14 +1131,17 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         return 0;
     }
 
+    printf("header info->vector_count: %d\n", (int)(header_info->vector_count));
+    printf("header info->dimensions: %d\n", (int)(header_info->dimensions));
+
     int original_vector_count = header_info->vector_count;
 
     // Calculate new vector count (original count minus deleted count)
     int new_vector_count = original_vector_count - delete_count;
 
     // Write the new header to the temp file
-    fwrite(&new_vector_count, sizeof(int), 1, temp_vec_file);
-    fwrite(&header_info->dimensions, sizeof(uint32_t), 1, temp_vec_file);
+    // fwrite(&new_vector_count, sizeof(int), 1, temp_vec_file);
+    // fwrite(&header_info->dimensions, sizeof(uint32_t), 1, temp_vec_file);
 
     // Define buffer size (in number of vectors) and allocate buffer
     const int BUFFER_SIZE = 1024; // Adjust as needed for memory constraints
@@ -1196,6 +1197,7 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
             // Skip this vector if its ID is in the delete list
             if (binary_search_int(ids_to_delete, delete_count, metadata_id) != -1)
             {
+                printf("Skipping vector with ID %d\n", metadata_id);
                 continue; // Skip this vector
             }
 
@@ -1221,22 +1223,30 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     }
 
     // Verify we preserved the expected number of vectors
-    if (preserved_count != new_vector_count)
-    {
-        printf("Warning: Expected to preserve %d vectors, but actually preserved %d\n",
-               new_vector_count, preserved_count);
-        // Update the header with the actual count
-        rewind(temp_vec_file);
-        fwrite(&preserved_count, sizeof(int), 1, temp_vec_file);
-    }
+    // if (preserved_count != new_vector_count)
+    // {
+    //     printf("Warning: Expected to preserve %d vectors, but actually preserved %d\n",
+    //            new_vector_count, preserved_count);
+    //     // Update the header with the actual count
+    //     // rewind(temp_vec_file);
+    //     fwrite(&preserved_count, sizeof(int), 1, temp_vec_file);
+    // }
 
     // Clean up resources
     free(read_buffer);
     free(write_buffer);
 
     int vectors_actually_removed = original_vector_count - preserved_count;
+    // int new_total_vector_count = original_vector_count - vectors_actually_removed;
 
-    fclose(connection->vec_file);
+    // go to start of file
+    fseek(temp_vec_file, 0, SEEK_SET);
+    fwrite(&preserved_count, sizeof(int), 1, temp_vec_file);
+    fseek(temp_vec_file, 0, SEEK_SET);
+
+    if (connection->vec_file)
+        fclose(connection->vec_file);
+    fclose(temp_vec_file);
 
     // Delete the metadata from the SQLite database in batches
     const int BATCH_SIZE = 500;
@@ -1249,7 +1259,8 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     {
         printf("Failed to begin transaction: %s\n", err_msg);
         sqlite3_free(err_msg);
-        goto cleanup;
+        return 0;
+        // goto cleanup;
     }
 
     // Process deletions in batches
@@ -1293,11 +1304,8 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
     }
 
-cleanup:
-    // Clean up remaining resources
-    free(header_info);
-    fclose(temp_vec_file);
     free(temp_vec_file_path);
+    free(header_info);
 
     return vectors_actually_removed;
 }
@@ -1323,9 +1331,19 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
         return 0;
     }
 
+    if (filtered_count == 0)
+    {
+        free(sql_where);
+        if (filtered_ids)
+            free(filtered_ids);
+        return 0;
+    }
+
     free(sql_where);
 
     int delete_count = delete_data_by_ids(connection->file_path, filtered_ids, filtered_count);
+
+    printf("delete count: %d\n", delete_count);
 
     free(filtered_ids);
     return delete_count;

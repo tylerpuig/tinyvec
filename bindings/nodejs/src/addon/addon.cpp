@@ -850,13 +850,17 @@ namespace
     {
         AsyncDeleteVectorsByIdData *asyncData = static_cast<AsyncDeleteVectorsByIdData *>(data);
 
-        int actually_deleted = delete_vecs_by_ids(
+        int actually_deleted = 0;
+        actually_deleted = delete_vecs_by_ids(
             asyncData->file_path,
             asyncData->ids_to_delete,
             asyncData->delete_count);
 
-        asyncData->work = actually_deleted > 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
+        std::cout << "actually_deleted: " << actually_deleted << std::endl;
+
+        // asyncData->work = actually_deleted <= 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
         asyncData->actually_deleted_count = actually_deleted;
+        asyncData->success = (actually_deleted > 0);
     }
 
     void CompleteDeleteVectorsById(napi_env env, napi_status status, void *data)
@@ -864,37 +868,26 @@ namespace
         AsyncDeleteVectorsByIdData *asyncData = static_cast<AsyncDeleteVectorsByIdData *>(data);
 
         // Check if the operation was successful
-        bool success = asyncData->work == nullptr;
+        bool success = asyncData->work != nullptr;
 
-        if (status != napi_ok || !success)
-        {
-            // Create error object
-            napi_value error_msg, error_obj;
-            napi_create_string_utf8(env, "Failed to delete vectors by IDs", NAPI_AUTO_LENGTH, &error_msg);
-            napi_create_error(env, nullptr, error_msg, &error_obj);
+        std::cout << "success: " << success << std::endl;
 
-            // Reject the promise
-            napi_reject_deferred(env, asyncData->deferred, error_obj);
-        }
-        else
-        {
-            // Create result object
-            napi_value result_obj;
-            napi_create_object(env, &result_obj);
+        // Create result object
+        napi_value result_obj;
+        napi_create_object(env, &result_obj);
 
-            // Add count property
-            napi_value count_value;
-            napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
-            napi_set_named_property(env, result_obj, "deletedCount", count_value);
+        // Add count property
+        napi_value count_value;
+        napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
+        napi_set_named_property(env, result_obj, "deletedCount", count_value);
 
-            // Add success property
-            napi_value success_value;
-            napi_get_boolean(env, true, &success_value);
-            napi_set_named_property(env, result_obj, "success", success_value);
+        // Add success property
+        napi_value success_value;
+        napi_get_boolean(env, true, &success_value);
+        napi_set_named_property(env, result_obj, "success", success_value);
 
-            // Resolve the promise
-            napi_resolve_deferred(env, asyncData->deferred, result_obj);
-        }
+        // Resolve the promise
+        napi_resolve_deferred(env, asyncData->deferred, result_obj);
 
         // Clean up
         napi_delete_async_work(env, asyncData->work);
@@ -989,11 +982,12 @@ namespace
     {
         AsyncDeleteVectorsByFilterData *asyncData = static_cast<AsyncDeleteVectorsByFilterData *>(data);
 
-        int actually_deleted = delete_vecs_by_filter(
+        int actually_deleted = 0;
+        actually_deleted = delete_vecs_by_filter(
             asyncData->file_path, asyncData->json_filter);
 
-        asyncData->work = actually_deleted > 0 ? nullptr : reinterpret_cast<napi_async_work>(1);
         asyncData->actually_deleted_count = actually_deleted;
+        asyncData->success = (actually_deleted > 0);
     }
 
     void CompleteDeleteVectorsByFilter(napi_env env, napi_status status, void *data)
@@ -1001,37 +995,28 @@ namespace
         AsyncDeleteVectorsByFilterData *asyncData = static_cast<AsyncDeleteVectorsByFilterData *>(data);
 
         // Check if the operation was successful
-        bool success = asyncData->work == nullptr;
+        bool success = asyncData->success;
 
-        if (status != napi_ok || !success)
-        {
-            // Create error object
-            napi_value error_msg, error_obj;
-            napi_create_string_utf8(env, "Failed to delete vectors by filter", NAPI_AUTO_LENGTH, &error_msg);
-            napi_create_error(env, nullptr, error_msg, &error_obj);
+        std::cout << "success: " << success << std::endl;
 
-            // Reject the promise
-            napi_reject_deferred(env, asyncData->deferred, error_obj);
-        }
-        else
-        {
-            // Create result object
-            napi_value result_obj;
-            napi_create_object(env, &result_obj);
+        // Create result object
+        napi_value result_obj;
+        napi_create_object(env, &result_obj);
 
-            // Add count property
-            napi_value count_value;
-            napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
-            napi_set_named_property(env, result_obj, "deletedCount", count_value);
+        std::cout << "actual_deleted_count: " << asyncData->actually_deleted_count << std::endl;
 
-            // Add success property
-            napi_value success_value;
-            napi_get_boolean(env, true, &success_value);
-            napi_set_named_property(env, result_obj, "success", success_value);
+        // Add count property
+        napi_value count_value;
+        napi_create_int32(env, asyncData->actually_deleted_count, &count_value);
+        napi_set_named_property(env, result_obj, "deletedCount", count_value);
 
-            // Resolve the promise
-            napi_resolve_deferred(env, asyncData->deferred, result_obj);
-        }
+        // Add success property
+        napi_value success_value;
+        napi_get_boolean(env, true, &success_value);
+        napi_set_named_property(env, result_obj, "success", success_value);
+
+        // Resolve the promise
+        napi_resolve_deferred(env, asyncData->deferred, result_obj);
 
         // Clean up
         napi_delete_async_work(env, asyncData->work);

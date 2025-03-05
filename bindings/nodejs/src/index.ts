@@ -194,7 +194,22 @@ class TinyVecClient {
     let tempFilePath = `${this.filePath}.temp`;
     try {
       // first copy the vector file to a temp file
-      await fsPromises.copyFile(this.filePath, tempFilePath);
+
+      const indexStats = await nativeGetIndexStats(this.filePath);
+      if (!indexStats) {
+        return { deletedCount: 0, success: false };
+      }
+      const buffer = Buffer.alloc(8);
+      buffer.writeInt32LE(indexStats.vectors, 0);
+      buffer.writeInt32LE(indexStats.dimensions, 4);
+
+      // Open with 'wx' flag - creates a new file and fails if it exists
+      const fd = fs.openSync(tempFilePath, "wx");
+      fs.writeSync(fd, buffer);
+      // Force flush to disk
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      // await fsPromises.copyFile(this.filePath, tempFilePath);
       const deletionResult = await nativeDeleteVectorsByIds(this.filePath, ids);
 
       await fsPromises.rename(tempFilePath, this.filePath);
@@ -207,7 +222,7 @@ class TinyVecClient {
       throw error;
     } finally {
       // Clean up temp files regardless of success or failure
-      await fsPromises.unlink(tempFilePath).catch(() => {});
+      // await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 
@@ -230,6 +245,14 @@ class TinyVecClient {
         this.filePath,
         filerStr
       );
+
+      if (!deletionResult.deletedCount) {
+        nativeUpdateDbFileConnection(this.filePath);
+        return {
+          deletedCount: 0,
+          success: false,
+        };
+      }
 
       await fsPromises.rename(tempFilePath, this.filePath);
 
