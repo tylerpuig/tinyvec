@@ -85,7 +85,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     if (setvbuf(vec_file, NULL, _IOFBF, 1024 * 1024) != 0)
     {
         printf("Failed to set vector file buffer\n");
-        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -93,7 +92,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     TinyVecConnection *connection = malloc(sizeof(TinyVecConnection));
     if (!connection)
     {
-        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -104,7 +102,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     if (!sqlite_path)
     {
         free(header_info);
-        // free_metadata_file_paths(metadata_paths);
         fclose(vec_file);
         return NULL;
     }
@@ -115,7 +112,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     {
         printf("Failed to open SQLite database: %s\n", sqlite3_errmsg(db));
         sqlite3_close(db);
-        // free_metadata_file_paths(metadata_paths);
         free(sqlite_path);
         free(header_info);
         fclose(vec_file);
@@ -150,7 +146,6 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     {
         free(connection);
         fclose(vec_file);
-        // free_metadata_file_paths(metadata_paths);
         free(header_info);
         return NULL;
     }
@@ -257,7 +252,7 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     if (!connection)
     {
         printf("Failed to get connection\n");
-        goto cleanup;
+        return NULL;
     }
 
     // Get header info, also resets the file position
@@ -265,16 +260,22 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     if (!header_info)
     {
         printf("Failed to get header info\n");
-        goto cleanup;
+        return NULL;
     }
 
     if (header_info->dimensions == 0 || header_info->vector_count == 0)
     {
-        goto cleanup;
+        free(header_info);
+        return NULL;
     }
 
     // Convert JSON filter to SQL
     char *sql_where = json_query_to_sql(json_filter);
+    if (!sql_where)
+    {
+        free(header_info);
+        return NULL;
+    }
 
     // Get filtered IDs from SQLite
     if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
@@ -285,11 +286,10 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     }
 
     free(sql_where);
-
     // If no results match the filter, return empty result
     if (filtered_count == 0)
     {
-        printf("No results match the filter\n");
+        free(header_info);
         return NULL;
     }
 
@@ -301,11 +301,18 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 32);
     if (!vec_buffer)
     {
+        free(header_info);
         printf("Failed to allocate vector buffer\n");
-        goto cleanup;
+        return NULL;
     }
 
     float *query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
+    if (!query_vec_norm)
+    {
+        free(header_info);
+        free(vec_buffer);
+        return NULL;
+    }
 
     for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
     {
@@ -316,8 +323,11 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     min_heap = createMinHeap(top_k);
     if (!min_heap)
     {
+        free(header_info);
+        free(query_vec_norm);
+        free(vec_buffer);
         printf("Failed to create min heap\n");
-        goto cleanup;
+        return NULL;
     }
 
     // Process vectors
@@ -425,7 +435,7 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     if (!connection)
     {
         printf("Failed to get connection\n");
-        goto cleanup;
+        return NULL;
     }
 
     // Get header info, also resets the file position
@@ -433,12 +443,13 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     if (!header_info)
     {
         printf("Failed to get header info\n");
-        goto cleanup;
+        return NULL;
     }
 
     if (header_info->dimensions == 0 || header_info->vector_count == 0)
     {
-        goto cleanup;
+        free(header_info);
+        return NULL;
     }
 
     // Allocate vector buffer
@@ -447,14 +458,17 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     if (!vec_buffer)
     {
         printf("Failed to allocate vector buffer\n");
-        goto cleanup;
+        free(header_info);
+        return NULL;
     }
 
     query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
     if (!query_vec_norm)
     {
         printf("Failed to normalize query vector\n");
-        goto cleanup;
+        free(header_info);
+        free(vec_buffer);
+        return NULL;
     }
 
     for (uint64_t i = 0; i < header_info->dimensions; i += 64 / sizeof(float))
@@ -467,7 +481,10 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     if (!min_heap)
     {
         printf("Failed to create min heap\n");
-        goto cleanup;
+        free(header_info);
+        free(query_vec_norm);
+        free(vec_buffer);
+        return NULL;
     }
 
     // Process vectors

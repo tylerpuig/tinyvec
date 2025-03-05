@@ -58,14 +58,15 @@ class TinyVecClient {
       fs.fsyncSync(fd);
       fs.closeSync(fd);
 
+      // These are now deprecated
       // Create empty metadata files
-      const idxFd = fs.openSync(absolutePath + ".idx", "wx");
-      const metaFd = fs.openSync(absolutePath + ".meta", "wx");
-      // Force flush these
-      fs.fsyncSync(idxFd);
-      fs.fsyncSync(metaFd);
-      fs.closeSync(idxFd);
-      fs.closeSync(metaFd);
+      // const idxFd = fs.openSync(absolutePath + ".idx", "wx");
+      // const metaFd = fs.openSync(absolutePath + ".meta", "wx");
+      // // Force flush these
+      // fs.fsyncSync(idxFd);
+      // fs.fsyncSync(metaFd);
+      // fs.closeSync(idxFd);
+      // fs.closeSync(metaFd);
     }
     nativeConnect(absolutePath, config);
     return new TinyVecClient(absolutePath, config);
@@ -97,19 +98,7 @@ class TinyVecClient {
 
   async insert(data: tinyvecTypes.TinyVecInsertion[]): Promise<number> {
     if (!data || !data.length) return 0;
-    const basePath = this.filePath;
-    const origFiles = {
-      base: basePath,
-      idx: `${basePath}.idx`,
-      meta: `${basePath}.meta`,
-    };
-
-    const tempFiles = {
-      base: `${basePath}.temp`,
-      idx: `${basePath}.idx.temp`,
-      meta: `${basePath}.meta.temp`,
-    };
-
+    const tempFilePath = `${this.filePath}.temp`;
     try {
       const indexStats = await nativeGetIndexStats(this.filePath);
       if (indexStats.dimensions === 0) {
@@ -147,11 +136,7 @@ class TinyVecClient {
       });
 
       // Copy original files to temp
-      await Promise.all([
-        fsPromises.copyFile(origFiles.base, tempFiles.base),
-        fsPromises.copyFile(origFiles.idx, tempFiles.idx),
-        fsPromises.copyFile(origFiles.meta, tempFiles.meta),
-      ]);
+      await fsPromises.copyFile(this.filePath, tempFilePath);
 
       // Insert data
       const inserted = await nativeInsert(
@@ -164,12 +149,9 @@ class TinyVecClient {
         return 0;
       }
 
-      // "Atomic" rename of temp files to original
-      await Promise.all([
-        fsPromises.rename(tempFiles.base, origFiles.base),
-        fsPromises.rename(tempFiles.idx, origFiles.idx),
-        fsPromises.rename(tempFiles.meta, origFiles.meta),
-      ]);
+      // Rename of temp file to original
+
+      await fsPromises.rename(tempFilePath, this.filePath);
 
       // Update DB file connection
       nativeUpdateDbFileConnection(this.filePath);
@@ -179,11 +161,8 @@ class TinyVecClient {
       throw error;
     } finally {
       // Clean up temp files regardless of success or failure
-      await Promise.all([
-        fsPromises.unlink(tempFiles.base).catch(() => {}),
-        fsPromises.unlink(tempFiles.idx).catch(() => {}),
-        fsPromises.unlink(tempFiles.meta).catch(() => {}),
-      ]);
+
+      await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 
@@ -196,20 +175,15 @@ class TinyVecClient {
       // first copy the vector file to a temp file
 
       const indexStats = await nativeGetIndexStats(this.filePath);
-      if (!indexStats) {
+      if (!indexStats || !indexStats.vectors) {
         return { deletedCount: 0, success: false };
       }
-      const buffer = Buffer.alloc(8);
-      buffer.writeInt32LE(indexStats.vectors, 0);
-      buffer.writeInt32LE(indexStats.dimensions, 4);
-
-      // Open with 'wx' flag - creates a new file and fails if it exists
-      const fd = fs.openSync(tempFilePath, "wx");
-      fs.writeSync(fd, buffer);
-      // Force flush to disk
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-      // await fsPromises.copyFile(this.filePath, tempFilePath);
+      // Write the header to the temp file
+      await tinyvecUtils.writeFileHeader(
+        tempFilePath,
+        indexStats.vectors,
+        indexStats.dimensions
+      );
       const deletionResult = await nativeDeleteVectorsByIds(this.filePath, ids);
 
       await fsPromises.rename(tempFilePath, this.filePath);
@@ -239,24 +213,19 @@ class TinyVecClient {
     let tempFilePath = `${this.filePath}.temp`;
     try {
       const indexStats = await nativeGetIndexStats(this.filePath);
-      if (!indexStats) {
+      if (!indexStats || !indexStats.vectors) {
         return { deletedCount: 0, success: false };
       }
-      // first copy the vector file to a temp file
-      const buffer = Buffer.alloc(8);
-      buffer.writeInt32LE(indexStats.vectors, 0);
-      buffer.writeInt32LE(indexStats.dimensions, 4);
-
-      // Open with 'wx' flag - creates a new file and fails if it exists
-      const fd = fs.openSync(tempFilePath, "wx");
-      fs.writeSync(fd, buffer);
-      // Force flush to disk
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-      const fileStr = JSON.stringify(options.filter);
+      // Write the header to the temp file
+      await tinyvecUtils.writeFileHeader(
+        tempFilePath,
+        indexStats.vectors,
+        indexStats.dimensions
+      );
+      const filterStr = JSON.stringify(options.filter);
       const deletionResult = await nativeDeleteVectorsByFilter(
         this.filePath,
-        fileStr
+        filterStr
       );
 
       if (!deletionResult.deletedCount) {
