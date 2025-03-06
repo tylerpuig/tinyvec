@@ -1,5 +1,5 @@
 import uuid
-import src.tinyvec as tinyvec
+import tinyvec
 import pytest
 import numpy as np
 import tempfile

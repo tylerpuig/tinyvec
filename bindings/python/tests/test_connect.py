@@ -1,4 +1,4 @@
-import src.tinyvec as tinyvec
+import tinyvec
 import pytest
 import os
 import uuid

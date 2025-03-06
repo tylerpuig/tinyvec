@@ -1,4 +1,4 @@
-import src.tinyvec as tinyvec
+import tinyvec
 import pytest
 import numpy as np
 from typing import List, Dict, Any, cast
