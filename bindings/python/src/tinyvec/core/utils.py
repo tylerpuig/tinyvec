@@ -31,19 +31,11 @@ def create_db_files(file_path: str, dimensions: int = 0):
             f.flush()
             os.fsync(f.fileno())
 
-        # Create empty metadata files
-        for suffix in ['.idx', '.meta']:
-            with open(absolute_path + suffix, 'xb') as f:
-                f.flush()
-                os.fsync(f.fileno())
-
     except FileExistsError as e:
-        # Clean up any partially created files
-        for path in [absolute_path, absolute_path + '.idx', absolute_path + '.meta']:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
+        try:
+            os.unlink(absolute_path)
+        except FileNotFoundError:
+            pass
         raise FileExistsError(
             f"One or more vector files already exist at {absolute_path}") from e
 

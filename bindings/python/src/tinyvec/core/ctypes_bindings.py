@@ -69,6 +69,13 @@ class TinyVecIndexStats(ctypes.Structure):
     ]
 
 
+class DBSearchResult(ctypes.Structure):
+    _fields_ = [
+        ("results", ctypes.POINTER(VecResult)),
+        ("count", ctypes.c_int)
+    ]
+
+
 # Load the library
 lib = ctypes.CDLL(str(get_lib_path()))
 
@@ -81,7 +88,15 @@ lib.get_top_k.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float32),
     ctypes.c_int
 ]
-lib.get_top_k.restype = ctypes.POINTER(VecResult)
+lib.get_top_k.restype = ctypes.POINTER(DBSearchResult)
+
+lib.get_top_k_with_filter.argtypes = [
+    ctypes.c_char_p,
+    np.ctypeslib.ndpointer(dtype=np.float32),
+    ctypes.c_int,
+    ctypes.c_char_p
+]
+lib.get_top_k_with_filter.restype = ctypes.POINTER(DBSearchResult)
 
 lib.get_index_stats.argtypes = [ctypes.c_char_p]
 lib.get_index_stats.restype = TinyVecIndexStats

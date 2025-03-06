@@ -3,24 +3,29 @@ from .types import VectorInput
 
 
 @dataclass
-class TinyVecIndexStats:
+class IndexStats:
     vector_count: int
     dimensions: int
 
 
 @dataclass
-class TinyVecResult:
+class SearchResult:
     similarity: float
     index: int
     metadata: dict | None
 
 
 @dataclass
-class TinyVecInsertion:
+class Insertion:
     vector: VectorInput
     metadata: dict | None
 
 
 @dataclass
-class TinyVecConfig:
+class ClientConfig:
     dimensions: int | None = None
+
+
+@dataclass
+class SearchOptions:
+    filter: dict | None = None
