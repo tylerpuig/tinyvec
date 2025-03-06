@@ -55,6 +55,7 @@ Thumbs.db
 /docs/api/_build/
 
 /bindings/nodejs/temp/
+/bindings/python/temp/
 *.db
 *.tgz
 *.in
