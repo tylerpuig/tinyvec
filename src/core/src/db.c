@@ -462,7 +462,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     }
 
     // Allocate vector buffer
-    // vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 32);
     const int BUFFER_SIZE = calculate_optimal_buffer_size(header_info->dimensions);
     vec_buffer = (float *)aligned_malloc(sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE, 16);
 
@@ -472,12 +471,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
         free(header_info);
         return NULL;
     }
-
-    // if (posix_memalign((void **)&vec_buffer, 16, sizeof(float) * (header_info->dimensions + 1) * BUFFER_SIZE))
-    // {
-    //     printf("Failed to allocate aligned memory vec_buffer_test\n");
-    //     return NULL;
-    // }
 
     query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
     if (!query_vec_norm)

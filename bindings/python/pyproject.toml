@@ -41,6 +41,8 @@ package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
 
 [tool.poetry.group.dev.dependencies]
 build = "^1.2.2.post1"
+setuptools = "^75.8.2"
+wheel = "^0.45.1"
 
 [tool.poetry]
 packages = [ { include = "tinyvec", from = "src" }]
