@@ -10,6 +10,7 @@ import random
 import asyncio
 import struct
 import os
+import json
 
 from constants import (
     LANCEDB_PATH, COLLECTION_NAME, INSERTION_COUNT, QDRANT_PATH, DIMENSIONS, SQLITE_VEC_PATH, TINYVEC_PATH, CHROMA_PATH)
@@ -42,24 +43,89 @@ def ensure_directories_exist():
         print(f"Created directory: {directory}")
 
 
+def generate_metadata(index, for_chroma=False):
+    """
+    Generate metadata with multiple fields including nested structure and arrays.
+    Using modulo to make half of the entries have different values.
+
+    Args:
+        index: The index of the item
+        for_chroma: If True, generates a flattened metadata format compatible with ChromaDB
+    """
+    if for_chroma:
+        # ChromaDB doesn't support arrays or nested objects in metadata
+        # Flatten the structure and convert arrays to strings
+        metadata = {
+            "id": index,
+            "created_at": "2025-03-05T12:00:00Z",
+            "tags": "vector,embedding,test",  # Convert array to string
+            "numeric_values": ",".join([str(round(random.random(), 4)) for _ in range(5)]),
+            "nested_level2": "nested value",
+            "nested_priority": random.randint(1, 10)
+        }
+
+        if index % 2 == 0:
+            metadata["type"] = "even"
+            metadata["category"] = "category_a"
+            metadata["nested_status"] = "active"
+            metadata["importance"] = "high"
+        else:
+            metadata["type"] = "odd"
+            metadata["category"] = "category_b"
+            metadata["nested_status"] = "pending"
+            metadata["importance"] = "medium"
+    else:
+        # Rich metadata structure for other databases
+        metadata = {
+            "id": index,
+            "created_at": "2025-03-05T12:00:00Z",
+            "tags": ["vector", "embedding", "test"],
+            # Array of numbers
+            "numeric_values": [random.random() for _ in range(5)],
+            "nested": {
+                "level1": {
+                    "level2": "nested value",
+                    "priority": random.randint(1, 10)
+                }
+            }
+        }
+
+        # For half the entries (using modulo), add different values
+        if index % 2 == 0:
+            metadata["type"] = "even"
+            metadata["category"] = "category_a"
+            metadata["nested"]["level1"]["status"] = "active"
+            metadata["importance"] = "high"
+        else:
+            metadata["type"] = "odd"
+            metadata["category"] = "category_b"
+            metadata["nested"]["level1"]["status"] = "pending"
+            metadata["importance"] = "medium"
+
+    return metadata
+
+
 async def main():
     ensure_directories_exist()
 
+    # === LanceDB ===
     lance_db_connection = lancedb.connect(LANCEDB_PATH)
 
     data_rows = []
     for i in range(INSERTION_COUNT):
+        metadata = generate_metadata(i)
         row = {
             "vector": np.random.rand(DIMENSIONS),
             "text": f"New text {i}",
-            "metadata": {"id": f"{i}"}
+            "metadata": metadata
         }
         data_rows.append(row)
 
-    # create lancedb table with data
+    # Create lancedb table with data
     lance_db_connection.create_table(
         COLLECTION_NAME, data=data_rows, mode="overwrite")
 
+    # === Qdrant ===
     qdrant_client = QdrantClient(path=QDRANT_PATH)
     qdrant_client.create_collection(
         collection_name=COLLECTION_NAME,
@@ -71,12 +137,12 @@ async def main():
 
     points = []
     for i in range(INSERTION_COUNT):
-        # Convert numpy array to list and ensure it's a list of floats
+        metadata = generate_metadata(i)
         points.append(
             models.PointStruct(
                 id=i,
                 vector=[random.random() for _ in range(DIMENSIONS)],
-                payload={"metadata": {"id": i}}
+                payload=metadata  # Using the same metadata structure
             )
         )
 
@@ -86,8 +152,8 @@ async def main():
         points=points
     )
 
-    sqlite_db = sqlite3.connect(
-        SQLITE_VEC_PATH)
+    # === SQLite ===
+    sqlite_db = sqlite3.connect(SQLITE_VEC_PATH)
     sqlite_db.enable_load_extension(True)
     sqlite_vec.load(sqlite_db)
     sqlite_db.enable_load_extension(False)
@@ -96,26 +162,47 @@ async def main():
     sqlite_db.execute(
         f"CREATE VIRTUAL TABLE vec_items USING vec0(embedding float[{DIMENSIONS}])"
     )
+
+    # Add a metadata table for SQLite
+    sqlite_db.execute("DROP TABLE IF EXISTS item_metadata")
+    sqlite_db.execute(
+        "CREATE TABLE item_metadata (id INTEGER PRIMARY KEY, metadata TEXT)"
+    )
+
     sqlite_db.commit()
 
     with sqlite_db:
+        # Insert vectors
         sqlite_db.executemany(
             "INSERT INTO vec_items(rowid, embedding) VALUES (?, ?)",
             [(i, serialize_f32([random.random() for _ in range(DIMENSIONS)]))
              for i in range(INSERTION_COUNT)]
         )
 
-    chroma_client = chromadb.PersistentClient(
-        CHROMA_PATH)
+        # Insert metadata as JSON strings
+        for i in range(INSERTION_COUNT):
+            metadata = generate_metadata(i)
+            sqlite_db.execute(
+                "INSERT INTO item_metadata(id, metadata) VALUES (?, ?)",
+                (i, json.dumps(metadata))
+            )
+
+    # === ChromaDB ===
+    chroma_client = chromadb.PersistentClient(CHROMA_PATH)
     chroma_collection = chroma_client.create_collection(
         COLLECTION_NAME, embedding_function=None)
+
     chroma_embeddings = []
     chroma_docs = []
     chroma_ids = []
+    chroma_metadatas = []
+
     for i in range(INSERTION_COUNT):
         chroma_embeddings.append(np.random.random(512).astype(np.float32))
         chroma_docs.append("item-" + str(i))
         chroma_ids.append(str(i))
+        # Use the Chroma-compatible metadata format
+        chroma_metadatas.append(generate_metadata(i, for_chroma=True))
 
     chroma_batch_size = 5_000
 
@@ -123,21 +210,24 @@ async def main():
         # Handle the last batch correctly
         end_idx = min(i + chroma_batch_size, INSERTION_COUNT)
 
-        # Add the current batch
+        # Add the current batch with metadata
         chroma_collection.add(
             embeddings=chroma_embeddings[i:end_idx],
             documents=chroma_docs[i:end_idx],
-            ids=chroma_ids[i:end_idx]
+            ids=chroma_ids[i:end_idx],
+            metadatas=chroma_metadatas[i:end_idx]
         )
 
+    # === TinyVec ===
     tinyvec_client = TinyVecClient()
     tinyvec_client.connect(TINYVEC_PATH, TinyVecConfig(dimensions=DIMENSIONS))
 
     tinyvec_insertions = []
     for i in range(INSERTION_COUNT):
+        metadata = generate_metadata(i)
         tinyvec_insertions.append(TinyVecInsertion(
             vector=[random.random() for _ in range(DIMENSIONS)],
-            metadata={"id": i}
+            metadata=metadata
         ))
     await tinyvec_client.insert(tinyvec_insertions)
 
