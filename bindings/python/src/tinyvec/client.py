@@ -8,7 +8,7 @@ import struct
 import ctypes
 import shutil
 from typing import List, cast
-from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array
+from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header
 from .types import VectorInput
 
 
@@ -18,7 +18,8 @@ from .models import (
     SearchResult,
     Insertion,
     IndexStats,
-    SearchOptions
+    SearchOptions,
+    DeletionResult
 )
 
 
@@ -227,20 +228,66 @@ class TinyVecClient:
                     os.unlink(temp_file_path)
                 except FileNotFoundError:
                     pass
-
-                # Clear ctypes arrays
-                # if 'vec_array' in locals():
-                #     for ptr in vec_array:
-                #         if ptr:
-                #             del ptr
-                # if 'metadata_array' in locals():
-                #     for ptr in metadata_array:
-                #         if ptr:
-                #             del ptr
         return await asyncio.get_event_loop().run_in_executor(
             self.executor,
             insert_data
         )
+
+    async def delete_by_ids(self, ids: List[int]) -> DeletionResult:
+        if not ids or len(ids) == 0:
+            return DeletionResult(deleted_count=0, success=False)
+
+        def run_delete_ids_native() -> int:
+            # Convert Python list to C array for C function call
+            c_array = (ctypes.c_int * len(ids))(*ids)
+
+            # Call the C function to perform deletion
+            deleted_count = lib.delete_data_by_ids(
+                self.encoded_path, c_array, len(ids))
+
+            return deleted_count
+
+        if not self.file_path:
+            return DeletionResult(deleted_count=0, success=False)
+
+        temp_file_path = f"{self.file_path}.temp"
+        try:
+            # Get current index stats
+            index_stats = await self.get_index_stats()
+            if not index_stats or index_stats.vector_count == 0:
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Write the header to the temp file
+            write_file_header(
+                temp_file_path,
+                index_stats.vector_count,
+                index_stats.dimensions
+            )
+
+            # Execute the native deletion function in the executor
+            deleted_count = await asyncio.get_event_loop().run_in_executor(
+                self.executor,
+                run_delete_ids_native  # Use the native function that returns an int
+            )
+
+            # Rename temp file to original
+            os.replace(temp_file_path, self.file_path)
+
+            # Update DB file connection
+            lib.update_db_file_connection(self.encoded_path)
+
+            return DeletionResult(deleted_count=deleted_count, success=True)
+
+        except Exception as e:
+            return DeletionResult(deleted_count=0, success=False)
+        finally:
+            # Clean up temp file regardless of success or failure
+            try:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+            except:
+                # Ignore errors during cleanup
+                pass
 
     async def get_index_stats(self) -> IndexStats:
         def run_stats():

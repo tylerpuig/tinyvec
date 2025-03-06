@@ -113,3 +113,10 @@ lib.insert_data.restype = ctypes.c_size_t
 
 lib.update_db_file_connection.argtypes = [ctypes.c_char_p]
 lib.update_db_file_connection.restype = ctypes.c_bool
+
+lib.delete_data_by_ids.argtypes = [
+    ctypes.c_char_p,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int
+]
+lib.delete_data_by_ids.restype = ctypes.c_int

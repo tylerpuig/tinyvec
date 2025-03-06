@@ -29,3 +29,9 @@ class ClientConfig:
 @dataclass
 class SearchOptions:
     filter: dict | None = None
+
+
+@dataclass
+class DeletionResult:
+    deleted_count: int
+    success: bool
