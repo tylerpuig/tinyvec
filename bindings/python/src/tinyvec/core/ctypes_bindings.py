@@ -120,3 +120,9 @@ lib.delete_data_by_ids.argtypes = [
     ctypes.c_int
 ]
 lib.delete_data_by_ids.restype = ctypes.c_int
+
+lib.delete_data_by_filter.argtypes = [
+    ctypes.c_char_p,
+    ctypes.c_char_p
+]
+lib.delete_data_by_filter.restype = ctypes.c_int

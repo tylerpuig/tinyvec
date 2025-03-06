@@ -289,6 +289,70 @@ class TinyVecClient:
                 # Ignore errors during cleanup
                 pass
 
+    async def delete_by_filter(self, search_options: SearchOptions) -> DeletionResult:
+        if not search_options:
+            raise ValueError("No options provided")
+
+        if not search_options.filter:
+            raise ValueError("No filter provided")
+
+        if not self.file_path:
+            return DeletionResult(deleted_count=0, success=False)
+
+        temp_file_path = f"{self.file_path}.temp"
+
+        filter_str = json.dumps(search_options.filter).encode('utf-8')
+
+        def run_delete_by_filter() -> int:
+            deleted_count = lib.delete_data_by_filter(
+                self.encoded_path, filter_str)
+            if not deleted_count:
+                return 0
+            return deleted_count
+
+        try:
+            # Get current index stats
+            index_stats = await self.get_index_stats()
+            if not index_stats or index_stats.vector_count == 0:
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Write the header to the temp file
+            write_file_header(
+                temp_file_path,
+                index_stats.vector_count,
+                index_stats.dimensions
+            )
+
+            # Call the C function to perform deletion
+            deleted_count = await asyncio.get_event_loop().run_in_executor(
+                self.executor,
+                run_delete_by_filter
+            )
+
+            # Match Node.js behavior
+            if deleted_count == 0:
+                lib.update_db_file_connection(self.encoded_path)
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Rename temp file to original
+            os.replace(temp_file_path, self.file_path)
+
+            # Update DB file connection
+            lib.update_db_file_connection(self.encoded_path)
+
+            return DeletionResult(deleted_count=deleted_count, success=True)
+
+        except Exception as e:
+            raise e
+        finally:
+            # Clean up temp file regardless of success or failure
+            try:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+            except:
+                # Ignore errors during cleanup
+                pass
+
     async def get_index_stats(self) -> IndexStats:
         def run_stats():
             stats = lib.get_index_stats(self.encoded_path)

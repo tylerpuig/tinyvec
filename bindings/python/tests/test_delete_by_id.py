@@ -51,7 +51,7 @@ async def insert_test_vectors(client: tinyvec.TinyVecClient) -> int:
             "category": "even" if i % 2 == 0 else "odd"
         })
 
-    insertions = []
+    insertions: List[tinyvec.Insertion] = []
     for item in test_data:
         # Convert TypedDict to regular dict to avoid type issues
         metadata_dict = dict(item)
