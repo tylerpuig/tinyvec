@@ -38,6 +38,13 @@ package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
 [tool.setuptools.exclude-package-data]
 "*" = ["tests", "*.tests", "*.tests.*"]
 
+
+[tool.poetry.group.dev.dependencies]
+build = "^1.2.2.post1"
+
+[tool.poetry]
+packages = [ { include = "tinyvec", from = "src" }]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.4",
