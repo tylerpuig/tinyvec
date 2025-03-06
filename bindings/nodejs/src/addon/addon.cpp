@@ -24,6 +24,7 @@ namespace
         int top_k;
         char *file_path;
         char *metadata_filters;
+        DBSearchResult *raw_result;
         int returned_results;
         std::vector<SearchResult> results;
         napi_deferred deferred;
@@ -60,7 +61,6 @@ namespace
         {
             std::vector<SearchResult> result_vec;
 
-            // First, call the function directly without using unique_ptr
             DBSearchResult *raw_result = nullptr;
 
             if (searchData->metadata_filters)
@@ -86,38 +86,18 @@ namespace
                 return;
             }
 
-            // If raw_result is valid - now wrap it in unique_ptr for automatic cleanup
-            std::unique_ptr<DBSearchResult, void (*)(DBSearchResult *)> search_result(
-                raw_result,
-                [](DBSearchResult *ptr)
-                {
-                    if (ptr)
-                    {
-                        // Free metadata for each result
-                        if (ptr->results)
-                        {
-                            for (int i = 0; i < ptr->count; i++)
-                            {
-                                if (ptr->results[i].metadata.data)
-                                {
-                                    free(ptr->results[i].metadata.data);
-                                }
-                            }
-                            free(ptr->results);
-                        }
-                        free(ptr);
-                    }
-                });
+            // Save raw result for cleanup
+            searchData->raw_result = raw_result;
 
             // Check for empty results array
-            if (!search_result->results || search_result->count <= 0)
+            if (!raw_result->results || raw_result->count <= 0)
             {
                 searchData->results = std::vector<SearchResult>();
                 return;
             }
 
             // Use the actual count from the search result, which may be less than top_k
-            int result_count = (searchData->top_k < search_result->count) ? searchData->top_k : search_result->count;
+            int result_count = (searchData->top_k < raw_result->count) ? searchData->top_k : raw_result->count;
 
             // Reserve space for the results
             result_vec.reserve(result_count);
@@ -125,9 +105,9 @@ namespace
             // Copy the results to the result vector
             for (int i = 0; i < result_count; i++)
             {
-                result_vec.push_back({search_result->results[i].index,
-                                      search_result->results[i].similarity,
-                                      search_result->results[i].metadata});
+                result_vec.push_back({raw_result->results[i].index,
+                                      raw_result->results[i].similarity,
+                                      raw_result->results[i].metadata});
             }
 
             searchData->results = std::move(result_vec);
@@ -219,7 +199,31 @@ namespace
         }
 
         // Clean up
+        if (searchData->raw_result)
+        {
+            // Free metadata for each result
+            if (searchData->raw_result->results)
+            {
+                for (int i = 0; i < searchData->raw_result->count; i++)
+                {
+                    if (searchData->raw_result->results[i].metadata.data)
+                    {
+                        free(searchData->raw_result->results[i].metadata.data);
+                    }
+                }
+                free(searchData->raw_result->results);
+            }
+            free(searchData->raw_result);
+        }
         status = napi_delete_async_work(env, searchData->work);
+        if (searchData->metadata_filters)
+        {
+            delete[] searchData->metadata_filters;
+        }
+        // if (searchData->file_path)
+        // {
+        //     delete[] searchData->file_path;
+        // }
         delete searchData;
     }
 
@@ -676,7 +680,6 @@ namespace
         ConnectionData *connection_data = prepare_data_for_connection(env, info);
         if (!connection_data)
         {
-            std::cout << "Failed to prepare data for connection" << std::endl;
             return nullptr;
         }
 
