@@ -250,4 +250,5 @@ export type {
   IndexFileStats,
   TinyVecConfig,
   JsonValue,
+  TinyVecSearchOptions,
 } from "./types";
