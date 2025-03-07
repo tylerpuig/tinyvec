@@ -62,3 +62,4 @@ Thumbs.db
 /bindings/nodejs/prebuilds/
 /benchmarks/python/benchmarks/db-files/
 /benchmarks/python/benchmarks/metrics.json
+/benchmarks/python/benchmarks/combined_benchmark_results.html

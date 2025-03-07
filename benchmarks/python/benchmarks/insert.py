@@ -72,11 +72,13 @@ def generate_metadata(index):
         metadata["category"] = "category_a"
         metadata["nested"]["level1"]["status"] = "active"
         metadata["importance"] = "high"
+        metadata["amount"] = 100
     else:
         metadata["type"] = "odd"
         metadata["category"] = "category_b"
         metadata["nested"]["level1"]["status"] = "pending"
         metadata["importance"] = "medium"
+        metadata["amount"] = 200
 
     return metadata
 
@@ -104,11 +106,13 @@ def generate_chroma_metadata(index):
         metadata["category"] = "category_a"
         metadata["nested_status"] = "active"
         metadata["importance"] = "high"
+        metadata["amount"] = 100
     else:
         metadata["type"] = "odd"
         metadata["category"] = "category_b"
         metadata["nested_status"] = "pending"
         metadata["importance"] = "medium"
+        metadata["amount"] = 200
 
     return metadata
 
@@ -127,11 +131,14 @@ async def main():
         # Extract "type" from metadata to make it a top-level column
         type_value = metadata.pop("type")  # Remove from metadata
 
+        amount_value = 100 if i % 2 == 0 else 200
+
         row = {
             "vector": np.random.rand(DIMENSIONS),
             "text": f"New text {i}",
             "type": type_value,  # Add as separate column
-            "metadata": metadata
+            "metadata": metadata,
+            "amount": amount_value
         }
         data_rows.append(row)
 

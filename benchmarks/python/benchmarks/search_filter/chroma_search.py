@@ -23,19 +23,28 @@ def main():
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
     # Metadata filter similar to TinyVec example
-    metadata_filter: chromadb.Where = {"type": {"$eq": "even"}}
+    metadata_filter_eq: chromadb.Where = {"type": {"$eq": "even"}}
+    metadata_filter_gt: chromadb.Where = {"amount": {"$gt": 100}}
 
-    for _ in range(QUERY_ITERATIONS):
-        start_query_time = time.time()
-        collection.query(
-            query_embeddings=query_vec,
-            n_results=10,
-            where=metadata_filter
-        )
-        end_query_time = time.time()
-        total_time = end_query_time - start_query_time
-        print(f"Query time: {total_time * 1000:.2f}ms")
-        query_times.append(total_time)
+    filters = [metadata_filter_eq, metadata_filter_gt]
+
+    def run_bench(filters: list[chromadb.Where]):
+        for metadata_filter in filters:
+            print(f"Running benchmark with filter: {metadata_filter}")
+            # query_times: list[float] = []
+            for _ in range(QUERY_ITERATIONS):
+                start_query_time = time.time()
+                collection.query(
+                    query_embeddings=query_vec,
+                    n_results=10,
+                    where=metadata_filter
+                )
+                end_query_time = time.time()
+                total_time = end_query_time - start_query_time
+                print(f"Query time: {total_time * 1000:.2f}ms")
+                query_times.append(total_time)
+
+    run_bench(filters)
 
     avg_search_time = get_avg_search_time(query_times)
 

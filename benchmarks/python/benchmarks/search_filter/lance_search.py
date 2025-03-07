@@ -26,19 +26,28 @@ def main():
     # Perform search and measure time
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
-    # Metadata filter to match the TinyVec example
-    metadata_filter = "type = 'even'"
-
     query_times: List[float] = []
-    for _ in range(QUERY_ITERATIONS):
-        start_time = time.time()
-        # Add where clause for metadata filtering
-        table.search(query_vec).where(metadata_filter).limit(TOP_K).to_list()
-        end_time = time.time()
-        search_time = end_time - start_time
-        query_times.append(search_time)
 
-        print(f"\nSearch completed in {search_time * 1000:.2f}ms")
+    # Metadata filter to match the TinyVec example
+    metadata_filter_eq = "type = 'even'"
+    metadata_filter_gt = "amount > 100"
+
+    filters = [metadata_filter_eq, metadata_filter_gt]
+
+    def run_bench(filters: List[str]):
+        for metadata_filter in filters:
+            for _ in range(QUERY_ITERATIONS):
+                start_time = time.time()
+                # Add where clause for metadata filtering
+                table.search(query_vec).where(
+                    metadata_filter).limit(TOP_K).to_list()
+                end_time = time.time()
+                search_time = end_time - start_time
+                query_times.append(search_time)
+
+                print(f"\nSearch completed in {search_time * 1000:.2f}ms")
+
+    run_bench(filters)
 
     avg_search_time = get_avg_search_time(query_times)
 

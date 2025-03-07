@@ -28,21 +28,31 @@ async def main():
     time.sleep(SLEEP_TIME)
 
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
+    query_times: List[float] = []
 
-    search_options = tinyvec.SearchOptions(
+    search_options_eq = tinyvec.SearchOptions(
         filter={"type": {"$eq": "even"}}
     )
 
+    search_options_gt = tinyvec.SearchOptions(
+        filter={"amount": {"$gt": 100}}
+    )
+
+    filters: List[tinyvec.SearchOptions] = [
+        search_options_eq, search_options_gt]
+
     # Perform search and measure time
-    print("Performing search...")
-    query_times: List[float] = []
-    for _ in range(QUERY_ITERATIONS):
-        start_query_time = time.time()
-        await client.search(query_vec, TOP_K, search_options)
-        end_query_time = time.time()
-        total_time = end_query_time - start_query_time
-        print(f"Query time: {total_time * 1000:.2f}ms")
-        query_times.append(total_time)
+    async def run_bench(opts: List[tinyvec.SearchOptions]):
+        for metadata_filter in opts:
+            for _ in range(QUERY_ITERATIONS):
+                start_query_time = time.time()
+                await client.search(query_vec, TOP_K, metadata_filter)
+                end_query_time = time.time()
+                total_time = end_query_time - start_query_time
+                print(f"Query time: {total_time * 1000:.2f}ms")
+                query_times.append(total_time)
+
+    await run_bench(filters)
 
     avg_search_time = get_avg_search_time(query_times)
 

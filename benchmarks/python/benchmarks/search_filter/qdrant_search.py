@@ -27,6 +27,7 @@ async def main():
 
     # Generate random query vector
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0].tolist()
+    query_times: List[float] = []
 
     # Perform search and measure time
     print("Performing search with metadata filter...")
@@ -41,28 +42,40 @@ async def main():
         ]
     )
 
-    # Choose which filter to use
-    current_filter = filter_even
+    filter_gt = models.Filter(
+        must=[
+            models.FieldCondition(
+                key="amount",
+                range=models.Range(
+                    gt=100
+                )
+            ),
+        ]
+    )
+
+    filters: List[models.Filter] = [filter_even, filter_gt]
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
-    query_times: List[float] = []
-    for i in range(QUERY_ITERATIONS):
-        start_query_time = time.time()
+    def run_bench(filters: List[models.Filter]):
+        for metadata_filter in filters:
+            for i in range(QUERY_ITERATIONS):
+                start_query_time = time.time()
 
-        search_results = qdrant_client.search(
-            collection_name=COLLECTION_NAME,
-            query_vector=query_vec,
-            limit=TOP_K,
-            query_filter=current_filter
-        )
+                qdrant_client.search(
+                    collection_name=COLLECTION_NAME,
+                    query_vector=query_vec,
+                    limit=TOP_K,
+                    query_filter=metadata_filter
+                )
 
-        end_query_time = time.time()
-        total_time = end_query_time - start_query_time
-        print(f"Query {i+1} time: {total_time * 1000:.2f}ms")
-        query_times.append(total_time)
+                end_query_time = time.time()
+                total_time = end_query_time - start_query_time
+                print(f"Query {i+1} time: {total_time * 1000:.2f}ms")
+                query_times.append(total_time)
+
+    run_bench(filters)
 
     avg_search_time = get_avg_search_time(query_times)
-    print(f"Average search time: {avg_search_time * 1000:.2f}ms")
 
     time.sleep(SLEEP_TIME)
 
