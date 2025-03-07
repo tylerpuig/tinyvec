@@ -170,7 +170,7 @@ namespace
                 cJSON_Delete(parsed_json); // Clean up after conversion
             }
 
-            status = napi_set_named_property(env, resultObj, "index", index);
+            status = napi_set_named_property(env, resultObj, "id", index);
             if (status != napi_ok)
                 break;
             status = napi_set_named_property(env, resultObj, "similarity", score);
@@ -198,32 +198,33 @@ namespace
             status = napi_resolve_deferred(env, searchData->deferred, returnArray);
         }
 
-        // Clean up
-        if (searchData->raw_result)
-        {
-            // Free metadata for each result
-            if (searchData->raw_result->results)
-            {
-                for (int i = 0; i < searchData->raw_result->count; i++)
-                {
-                    if (searchData->raw_result->results[i].metadata.data)
-                    {
-                        free(searchData->raw_result->results[i].metadata.data);
-                    }
-                }
-                free(searchData->raw_result->results);
-            }
-            free(searchData->raw_result);
-        }
         status = napi_delete_async_work(env, searchData->work);
+
+        // Clean up
+        // if (searchData->raw_result)
+        // {
+        //     // Free metadata for each result
+        //     if (searchData->raw_result->results)
+        //     {
+        //         for (int i = 0; i < searchData->raw_result->count; i++)
+        //         {
+        //             if (searchData->raw_result->results[i].metadata.data)
+        //             {
+        //                 free(searchData->raw_result->results[i].metadata.data);
+        //             }
+        //         }
+        //         free(searchData->raw_result->results);
+        //     }
+        //     free(searchData->raw_result);
+        // }
         if (searchData->metadata_filters)
         {
             delete[] searchData->metadata_filters;
         }
-        // if (searchData->file_path)
-        // {
-        //     delete[] searchData->file_path;
-        // }
+        if (searchData->file_path)
+        {
+            delete[] searchData->file_path;
+        }
         delete searchData;
     }
 

@@ -36,7 +36,7 @@ export type NativeUpdateDbFileConnectionFunction = (
 ) => boolean;
 
 export type TinyVecSearchResult<TMeta = any> = {
-  index: number;
+  id: number;
   similarity: number;
   metadata: TMeta;
 };

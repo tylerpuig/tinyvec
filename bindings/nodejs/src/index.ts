@@ -189,7 +189,7 @@ class TinyVecClient {
   }
 
   async deleteByFilter(
-    options: tinyvecTypes.DeleteByFilterOptions
+    options: tinyvecTypes.TinyVecSearchOptions
   ): Promise<tinyvecTypes.DeletionResult> {
     if (!options) {
       throw new Error("No options provided");

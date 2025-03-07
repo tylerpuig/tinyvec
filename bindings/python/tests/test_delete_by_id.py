@@ -89,7 +89,7 @@ async def test_remove_single_vector_by_id(unique_client):
     assert search_results[0].metadata.get("category") == "even"
 
     # # Get the ID of the found vector
-    item_id = search_results[0].index
+    item_id = search_results[0].id
 
     # # Delete the vector by ID
     delete_result = await unique_client.delete_by_ids([item_id])
@@ -129,7 +129,7 @@ async def test_remove_multiple_vectors_by_id(unique_client):
     assert all(r.metadata.get("category") == "even" for r in search_results)
 
     # Get the IDs of the found vectors
-    item_ids = [r.index for r in search_results]
+    item_ids = [r.id for r in search_results]
 
     # Delete the vectors by IDs
     delete_result = await unique_client.delete_by_ids(item_ids)

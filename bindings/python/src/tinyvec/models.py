@@ -11,7 +11,7 @@ class IndexStats:
 @dataclass
 class SearchResult:
     similarity: float
-    index: int
+    id: int
     metadata: dict | None
 
 
