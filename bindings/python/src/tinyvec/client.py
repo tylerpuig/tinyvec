@@ -107,7 +107,7 @@ class TinyVecClient:
 
                 results.append(SearchResult(
                     similarity=result.similarity,
-                    index=result.index,
+                    id=result.index,
                     metadata=metadata
                 ))
 
