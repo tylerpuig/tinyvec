@@ -1,6 +1,8 @@
 # TinyVecDB
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/tinyvecdb)](https://www.npmjs.com/package/tinyvecdb)
+[![PyPI](https://img.shields.io/pypi/v/tinyvecdb)](https://pypi.org/project/tinyvecdb/)
 
 A lightweight, embedded vector database focused on simplicity and speed. TinyVecDB provides vector storage and similarity search without the complexity of client-server architectures.
 
@@ -12,14 +14,18 @@ A lightweight, embedded vector database focused on simplicity and speed. TinyVec
 - **Lightweight**: Minimal memory footprint and resource usage
 - **Offline-capable**: Great for desktop and mobile applications
 
-## 📋 Use Cases
+## 🧪 Performance
 
-| Good Use Cases                           | Less Ideal Use Cases                                     |
-| ---------------------------------------- | -------------------------------------------------------- |
-| ✅ Local semantic search in desktop apps | ❌ Complex query filters requiring SQL-like capabilities |
-| ✅ Rapid prototyping and MVPs            | ❌ Systems needing extensive admin tools/monitoring      |
-| ✅ Self-contained applications           | ❌ Cloud-native distributed architectures                |
-| ✅ Resource-constrained environments     | ❌ Applications requiring real-time replication          |
+TinyVecDB is optimized for performance:
+
+- **4-10x faster** query times compared to alternatives
+- **Minimal memory footprint** during operations
+- **Efficient metadata filtering** with vector search
+
+Check out our detailed benchmarks:
+
+- [Vector Search Performance](benchmarks/vector-search.md)
+- [Vector Search with Metadata Filtering](benchmarks/vector-search-with-filter.md)
 
 ## 🛠️ Installation
 
@@ -311,9 +317,16 @@ console.log(`Removed ${cleanupResult.deletedCount} low-rated items`);
 | path       | Path to database file | required                             |
 | dimensions | Dimension of vectors  | optional (derived from first vector) |
 
-## 🧪 Performance
+## 📋 Use Cases
 
-TinyVecDB is optimized for performance on resource-constrained devices:
+| Good Use Cases                           | Less Ideal Use Cases                                |
+| ---------------------------------------- | --------------------------------------------------- |
+| ✅ Local semantic search in desktop apps | ❌ Very complex multi-join query requireme          |
+| ✅ Rapid prototyping and MVPs            | ❌ Systems needing extensive admin tools/monitoring |
+| ✅ Self-contained applications           | ❌ Cloud-native distributed architectures           |
+| ✅ Resource-constrained environments     | ❌ Applications requiring real-time replication     |
+
+## 🧪 Additional Performance Notes
 
 - **C Core Engine**: Built with a native C core for maximum efficiency
 - Minimal memory footprint
