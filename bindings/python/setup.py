@@ -24,7 +24,8 @@ class CustomBuildExt(build_ext):
         setup_dir = os.path.dirname(os.path.abspath(__file__))
         print(f"Setup directory: {setup_dir}")
 
-        sources = ['db.c', 'minheap.c', 'distance.c', 'file.c', 'cJSON.c']
+        sources = ['db.c', 'minheap.c', 'distance.c',
+                   'file.c', 'cJSON.c', 'sqlite3.c', 'utils.c', 'query_convert.c']
         source_paths = [os.path.join(
             setup_dir, 'src', 'core', 'src', src) for src in sources]
 
@@ -145,6 +146,10 @@ class CustomBuildExt(build_ext):
                 'obj', os.path.basename(src).replace('.c', '.o'))
             obj_files.append(obj_file)
 
+            if os.path.basename(src) == 'sqlite3.c' and os.path.exists(obj_file):
+                print(f"Found existing sqlite3.o, skipping compilation")
+                continue
+
             compile_cmd = [
                 compiler, *compile_flags, '-c', src, '-o', obj_file
             ]
@@ -244,6 +249,10 @@ class CustomBuildExt(build_ext):
         print("\nCleaning up...")
         for obj in obj_files:
             try:
+                # Skip cleanup for sqlite3.o
+                if os.path.basename(obj) == 'sqlite3.o':
+                    print(f"Keeping: {obj}")
+                    continue
                 if os.path.exists(obj):
                     os.remove(obj)
                     print(f"Cleaned up: {obj}")
@@ -330,7 +339,7 @@ class CustomBdistWheel(bdist_wheel):
 
 setup(
     name="tinyvecdb",
-    version="0.1.3",
+    version="0.2.0",
     description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,

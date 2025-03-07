@@ -1,25 +1,29 @@
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-from typing import List
+from typing import List, Optional, Dict, Any
 import json
 import ctypes
 import os
 import struct
+import ctypes
+import shutil
 from typing import List, cast
-from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array
+from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header
 from .types import VectorInput
 
 
 from .core.ctypes_bindings import lib, VecResult, MetadataBytes
 from .models import (
-    TinyVecConfig,
-    TinyVecResult,
-    TinyVecInsertion,
-    TinyVecIndexStats
+    ClientConfig,
+    SearchResult,
+    Insertion,
+    IndexStats,
+    SearchOptions,
+    DeletionResult
 )
 
 
-base_tinyvec_config = TinyVecConfig(dimensions=0)
+base_tinyvec_config = ClientConfig(dimensions=0)
 
 
 class TinyVecClient:
@@ -29,7 +33,7 @@ class TinyVecClient:
         self.encoded_path: bytes | None = None
         self.dimensions: int | None = None
 
-    def connect(self, file_path: str, config: TinyVecConfig = base_tinyvec_config):
+    def connect(self, file_path: str, config: ClientConfig = base_tinyvec_config):
         absolute_path = ensure_absolute_path(file_path)
 
         dimensions = config.dimensions or 0
@@ -54,24 +58,42 @@ class TinyVecClient:
         self.file_path = absolute_path  # Store original string
         self.dimensions = connection.contents.dimensions
 
-    async def search(self, query_vec: VectorInput, top_k: int) -> List[TinyVecResult]:
+    async def search(self, query_vec: VectorInput, top_k: int, options: Optional[SearchOptions] = None) -> List[SearchResult]:
+
         def run_query():
             query_vec_float32 = get_float32_array(query_vec)
 
-            results_ptr = lib.get_top_k(
-                self.encoded_path,
-                query_vec_float32,
-                top_k
-            )
+            # If options with filter is provided, convert it to a JSON string
+            if options and options.filter:
+                filter_str = json.dumps(options.filter).encode('utf-8')
+
+                # Call the version of get_top_k that accepts options
+                results_ptr = lib.get_top_k_with_filter(
+                    self.encoded_path,
+                    query_vec_float32,
+                    top_k,
+                    filter_str
+                )
+            else:
+                # Call the original version without options
+                results_ptr = lib.get_top_k(
+                    self.encoded_path,
+                    query_vec_float32,
+                    top_k
+                )
 
             # Check if results_ptr is NULL
             if not results_ptr:
                 return []
 
-            results: List[TinyVecResult] = []
-            for i in range(top_k):
-                result = cast(VecResult, results_ptr[i])
-                metadata_struct = cast(MetadataBytes, result.metadata)
+            db_results = results_ptr.contents
+            result_count = min(db_results.count, top_k)
+
+            results: List[SearchResult] = []
+
+            for i in range(result_count):
+                result = db_results.results[i]
+                metadata_struct = result.metadata
 
                 try:
                     if metadata_struct.data and metadata_struct.length > 0:
@@ -83,9 +105,9 @@ class TinyVecClient:
                 except:
                     metadata = None
 
-                results.append(TinyVecResult(
+                results.append(SearchResult(
                     similarity=result.similarity,
-                    index=result.index,
+                    id=result.index,
                     metadata=metadata
                 ))
 
@@ -96,8 +118,7 @@ class TinyVecClient:
             run_query
         )
 
-    async def insert(self, vectors: List[TinyVecInsertion]):
-
+    async def insert(self, vectors: List[Insertion]):
         def insert_data():
             if len(vectors) == 0:
                 return 0
@@ -107,17 +128,7 @@ class TinyVecClient:
                 dimensions = len(vectors[0].vector)
 
             base_path = self.file_path
-            orig_files = {
-                'base': base_path,
-                'idx': f"{base_path}.idx",
-                'meta': f"{base_path}.meta"
-            }
-
-            temp_files = {
-                'base': f"{base_path}.temp",
-                'idx': f"{base_path}.idx.temp",
-                'meta': f"{base_path}.meta.temp"
-            }
+            temp_file_path = f"{base_path}.temp"
 
             if not self.file_path:
                 raise ValueError("File path is not set")
@@ -164,10 +175,9 @@ class TinyVecClient:
             if vec_count == 0:
                 return 0
             try:
-                # Copy original files to temp first
-                for orig, temp in zip(orig_files.values(), temp_files.values()):
-                    with open(orig, 'rb') as src, open(temp, 'wb') as dst:
-                        dst.write(src.read())
+                # Copy temp file
+
+                shutil.copyfile(self.file_path, temp_file_path)
 
                 # Create array of pointers to float arrays
                 vec_array = (ctypes.POINTER(ctypes.c_float) * vec_count)()
@@ -204,10 +214,8 @@ class TinyVecClient:
                 if inserted <= 0:
                     return 0
 
-                # Atomic rename of temp files to original
-                for temp, orig in zip(temp_files.values(), orig_files.values()):
-                    # os.replace is atomic on Unix systems
-                    os.replace(temp, orig)
+                # Rename temp file to original
+                os.replace(temp_file_path, self.file_path)
 
                 # Update DB file connection
                 lib.update_db_file_connection(self.encoded_path)
@@ -216,32 +224,141 @@ class TinyVecClient:
             except Exception as e:
                 raise e
             finally:
-                for temp in temp_files.values():
-                    try:
-                        os.unlink(temp)
-                    except FileNotFoundError:
-                        pass
-
-                # Clear ctypes arrays
-                if 'vec_array' in locals():
-                    for ptr in vec_array:
-                        if ptr:
-                            del ptr
-                if 'metadata_array' in locals():
-                    for ptr in metadata_array:
-                        if ptr:
-                            del ptr
+                try:
+                    os.unlink(temp_file_path)
+                except FileNotFoundError:
+                    pass
         return await asyncio.get_event_loop().run_in_executor(
             self.executor,
             insert_data
         )
 
-    async def get_index_stats(self) -> TinyVecIndexStats:
+    async def delete_by_ids(self, ids: List[int]) -> DeletionResult:
+        if not ids or len(ids) == 0:
+            return DeletionResult(deleted_count=0, success=False)
+
+        def run_delete_ids_native() -> int:
+            # Convert Python list to C array for C function call
+            c_array = (ctypes.c_int * len(ids))(*ids)
+
+            # Call the C function to perform deletion
+            deleted_count = lib.delete_data_by_ids(
+                self.encoded_path, c_array, len(ids))
+
+            return deleted_count
+
+        if not self.file_path:
+            return DeletionResult(deleted_count=0, success=False)
+
+        temp_file_path = f"{self.file_path}.temp"
+        try:
+            # Get current index stats
+            index_stats = await self.get_index_stats()
+            if not index_stats or index_stats.vector_count == 0:
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Write the header to the temp file
+            write_file_header(
+                temp_file_path,
+                index_stats.vector_count,
+                index_stats.dimensions
+            )
+
+            # Execute the native deletion function in the executor
+            deleted_count = await asyncio.get_event_loop().run_in_executor(
+                self.executor,
+                run_delete_ids_native  # Use the native function that returns an int
+            )
+
+            # Rename temp file to original
+            os.replace(temp_file_path, self.file_path)
+
+            # Update DB file connection
+            lib.update_db_file_connection(self.encoded_path)
+
+            return DeletionResult(deleted_count=deleted_count, success=True)
+
+        except Exception as e:
+            return DeletionResult(deleted_count=0, success=False)
+        finally:
+            # Clean up temp file regardless of success or failure
+            try:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+            except:
+                # Ignore errors during cleanup
+                pass
+
+    async def delete_by_filter(self, search_options: SearchOptions) -> DeletionResult:
+        if not search_options:
+            raise ValueError("No options provided")
+
+        if not search_options.filter:
+            raise ValueError("No filter provided")
+
+        if not self.file_path:
+            return DeletionResult(deleted_count=0, success=False)
+
+        temp_file_path = f"{self.file_path}.temp"
+
+        filter_str = json.dumps(search_options.filter).encode('utf-8')
+
+        def run_delete_by_filter() -> int:
+            deleted_count = lib.delete_data_by_filter(
+                self.encoded_path, filter_str)
+            if not deleted_count:
+                return 0
+            return deleted_count
+
+        try:
+            # Get current index stats
+            index_stats = await self.get_index_stats()
+            if not index_stats or index_stats.vector_count == 0:
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Write the header to the temp file
+            write_file_header(
+                temp_file_path,
+                index_stats.vector_count,
+                index_stats.dimensions
+            )
+
+            # Call the C function to perform deletion
+            deleted_count = await asyncio.get_event_loop().run_in_executor(
+                self.executor,
+                run_delete_by_filter
+            )
+
+            # Match Node.js behavior
+            if deleted_count == 0:
+                lib.update_db_file_connection(self.encoded_path)
+                return DeletionResult(deleted_count=0, success=False)
+
+            # Rename temp file to original
+            os.replace(temp_file_path, self.file_path)
+
+            # Update DB file connection
+            lib.update_db_file_connection(self.encoded_path)
+
+            return DeletionResult(deleted_count=deleted_count, success=True)
+
+        except Exception as e:
+            raise e
+        finally:
+            # Clean up temp file regardless of success or failure
+            try:
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+            except:
+                # Ignore errors during cleanup
+                pass
+
+    async def get_index_stats(self) -> IndexStats:
         def run_stats():
             stats = lib.get_index_stats(self.encoded_path)
             if not stats:
                 raise RuntimeError("Failed to get index stats")
-            return TinyVecIndexStats(
+            return IndexStats(
                 vector_count=stats.vector_count,
                 dimensions=stats.dimensions
             )

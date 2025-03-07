@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import path from "path";
 import type { NumericArray, JsonValue } from "./types";
 
@@ -60,5 +61,25 @@ export class VectorConversionError extends Error {
   ) {
     super(message);
     this.name = "VectorConversionError";
+  }
+}
+
+export async function writeFileHeader(
+  tmpPath: string,
+  vectors: number,
+  dims: number
+): Promise<void> {
+  try {
+    const buffer = Buffer.alloc(8);
+    buffer.writeInt32LE(vectors, 0);
+    buffer.writeInt32LE(dims, 4);
+    // Open with 'wx' flag - creates a new file and fails if it exists
+    const fileHandle = await fsPromises.open(tmpPath, "wx");
+    await fileHandle.write(buffer);
+    // Force flush to disk
+    await fileHandle.sync();
+    await fileHandle.close();
+  } catch (error) {
+    throw error;
   }
 }

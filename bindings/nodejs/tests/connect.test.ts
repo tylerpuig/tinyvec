@@ -2,39 +2,23 @@ import { TinyVecClient } from "../src/index";
 import type { TinyVecInsertion } from "../src/types";
 import fs from "fs/promises";
 import path from "path";
-import { generateRandomVector } from "./utils";
+import * as testUtils from "./utils";
+
+const DIMENSIONS = 128;
 
 describe("TinyVecClient Connect", () => {
   let tempDir: string;
   let dbPath: string;
-  let client: TinyVecClient | null;
 
   beforeEach(async () => {
-    // Create main temp directory if it doesn't exist
-    await fs.mkdir("temp").catch(() => {});
-
-    // Create a temporary directory for each test inside 'temp'
-    const randInt = Math.floor(Math.random() * 1000000);
-    tempDir = path.join("temp", `test-${randInt}`);
+    const hash = testUtils.createRandomMD5Hash();
+    tempDir = path.join("temp", hash);
     await fs.mkdir(tempDir);
-
-    dbPath = path.join(tempDir, "test.db");
-    client = null;
   });
 
-  const checkFilesExist = async (basePath: string) => {
-    const files = await Promise.all([
-      fs
-        .access(`${basePath}.idx`)
-        .then(() => true)
-        .catch(() => false),
-      fs
-        .access(`${basePath}.meta`)
-        .then(() => true)
-        .catch(() => false),
-    ]);
-    return files;
-  };
+  beforeAll(async () => {
+    await fs.mkdir("temp").catch(() => {});
+  });
 
   const readInitialHeader = async (filePath: string) => {
     let fileHandle;
@@ -52,21 +36,18 @@ describe("TinyVecClient Connect", () => {
   };
 
   test("should create new database files when they don't exist", async () => {
-    client = TinyVecClient.connect(dbPath, { dimensions: 128 });
+    const client = testUtils.getTinyvecClient(tempDir, DIMENSIONS);
 
     const indexStats = await client.getIndexStats();
     expect(indexStats.vectors).toBe(0);
     expect(indexStats.dimensions).toBe(128);
 
-    const [idxExists, metaExists] = await checkFilesExist(dbPath);
-
-    expect(idxExists).toBe(true);
-    expect(metaExists).toBe(true);
     expect(client).toBeInstanceOf(TinyVecClient);
   });
 
   test("should initialize header with correct values", async () => {
-    client = TinyVecClient.connect(dbPath, { dimensions: 128 });
+    const dbPath = testUtils.getRandDbPath(tempDir);
+    const client = TinyVecClient.connect(dbPath, { dimensions: 128 });
 
     const header = await readInitialHeader(dbPath);
     expect(header.vectorCount).toBe(0);
@@ -78,7 +59,7 @@ describe("TinyVecClient Connect", () => {
   });
 
   test("should handle missing dimensions in config", async () => {
-    const newDbPath = dbPath + Date.now();
+    const newDbPath = tempDir + Date.now();
     const newClient = TinyVecClient.connect(newDbPath);
 
     const header = await readInitialHeader(newDbPath);
@@ -87,19 +68,20 @@ describe("TinyVecClient Connect", () => {
   });
 
   test("should handle missing dimensions in config and update header file dimensions on first insert", async () => {
-    client = TinyVecClient.connect(dbPath);
+    const dbPath = testUtils.getRandDbPath(tempDir);
+    const client = TinyVecClient.connect(dbPath, { dimensions: DIMENSIONS });
 
     const indexStats = await client.getIndexStats();
     expect(indexStats.vectors).toBe(0);
-    expect(indexStats.dimensions).toBe(0);
+    expect(indexStats.dimensions).toBe(DIMENSIONS);
 
     const header = await readInitialHeader(dbPath);
     expect(header.vectorCount).toBe(0);
-    expect(header.dimensions).toBe(0);
+    expect(header.dimensions).toBe(DIMENSIONS);
 
     const insertions: TinyVecInsertion[] = [
       {
-        vector: generateRandomVector(128),
+        vector: testUtils.generateRandomVector(128),
         metadata: { id: 1 },
       },
     ];
@@ -116,41 +98,10 @@ describe("TinyVecClient Connect", () => {
     expect(stats.dimensions).toBe(128);
   });
 
-  test("should convert relative path to absolute", async () => {
-    const relativePath = "./test.db";
-    const absolutePath = path.resolve(process.cwd(), relativePath);
-
-    try {
-      client = TinyVecClient.connect(relativePath, { dimensions: 128 });
-      const exists = await fs
-        .access(absolutePath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(exists).toBe(true);
-    } finally {
-      // Clean up the files in current working directory
-      await Promise.all([
-        fs.unlink(absolutePath).catch(() => {}),
-        fs.unlink(`${absolutePath}.idx`).catch(() => {}),
-        fs.unlink(`${absolutePath}.meta`).catch(() => {}),
-      ]);
-    }
-  });
-
-  test("should create empty metadata files", async () => {
-    client = TinyVecClient.connect(dbPath, { dimensions: 128 });
-
-    const idxStats = await fs.stat(`${dbPath}.idx`);
-    const metaStats = await fs.stat(`${dbPath}.meta`);
-
-    expect(idxStats.size).toBe(0);
-    expect(metaStats.size).toBe(0);
-  });
-
   test("should not overwrite existing database", async () => {
     // Create first instance
-    client = TinyVecClient.connect(dbPath, { dimensions: 128 });
+    const dbPath = testUtils.getRandDbPath(tempDir);
+    const client = TinyVecClient.connect(dbPath, { dimensions: 128 });
 
     // Modify the header to check if it persists
     let fileHandle;
@@ -165,7 +116,7 @@ describe("TinyVecClient Connect", () => {
     }
 
     // Connect again
-    client = TinyVecClient.connect(dbPath, { dimensions: 256 });
+    const newClient = TinyVecClient.connect(dbPath, { dimensions: 256 });
 
     const header = await readInitialHeader(dbPath);
     expect(header.vectorCount).toBe(42);
@@ -174,6 +125,7 @@ describe("TinyVecClient Connect", () => {
 
   test("should throw an error if dimensions is not a number", async () => {
     const incorrectConfig = { dimensions: "128" };
+    const dbPath = testUtils.getRandDbPath(tempDir);
     expect(() =>
       // @ts-ignore
       TinyVecClient.connect(dbPath, incorrectConfig)

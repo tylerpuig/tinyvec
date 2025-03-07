@@ -16,6 +16,10 @@ const nativeGetIndexStats =
   nativeModule.getIndexStats as tinyvecTypes.NativeGetIndexStatsFunction;
 const nativeUpdateDbFileConnection =
   nativeModule.updateDbFileConnection as tinyvecTypes.NativeUpdateDbFileConnectionFunction;
+const nativeDeleteVectorsByIds =
+  nativeModule.deleteByIds as tinyvecTypes.DeleteVectorsByIdsFunction;
+const nativeDeleteVectorsByFilter =
+  nativeModule.deleteByFilter as tinyvecTypes.DeleteVectorsByFilterFunction;
 
 class TinyVecClient {
   private filePath: string;
@@ -53,15 +57,6 @@ class TinyVecClient {
       // Force flush to disk
       fs.fsyncSync(fd);
       fs.closeSync(fd);
-
-      // Create empty metadata files
-      const idxFd = fs.openSync(absolutePath + ".idx", "wx");
-      const metaFd = fs.openSync(absolutePath + ".meta", "wx");
-      // Force flush these
-      fs.fsyncSync(idxFd);
-      fs.fsyncSync(metaFd);
-      fs.closeSync(idxFd);
-      fs.closeSync(metaFd);
     }
     nativeConnect(absolutePath, config);
     return new TinyVecClient(absolutePath, config);
@@ -69,30 +64,31 @@ class TinyVecClient {
 
   async search<TMeta = any>(
     query: tinyvecTypes.NumericArray,
-    topK: number
+    topK: number,
+    options?: tinyvecTypes.TinyVecSearchOptions
   ): Promise<tinyvecTypes.TinyVecSearchResult<TMeta>[]> {
     if (typeof topK !== "number" || topK <= 0) {
       throw new Error("Top K must be a positive number.");
     }
     const float32Array = tinyvecUtils.convertToFloat32Array(query);
+
+    if (options) {
+      const filterStr = JSON.stringify(options?.filter ?? "{}");
+      const optsFmt = { ...options, filter: filterStr };
+      return await nativeSearch<TMeta>(
+        float32Array,
+        topK,
+        this.filePath,
+        optsFmt
+      );
+    }
+
     return await nativeSearch<TMeta>(float32Array, topK, this.filePath);
   }
 
   async insert(data: tinyvecTypes.TinyVecInsertion[]): Promise<number> {
     if (!data || !data.length) return 0;
-    const basePath = this.filePath;
-    const origFiles = {
-      base: basePath,
-      idx: `${basePath}.idx`,
-      meta: `${basePath}.meta`,
-    };
-
-    const tempFiles = {
-      base: `${basePath}.temp`,
-      idx: `${basePath}.idx.temp`,
-      meta: `${basePath}.meta.temp`,
-    };
-
+    const tempFilePath = `${this.filePath}.temp`;
     try {
       const indexStats = await nativeGetIndexStats(this.filePath);
       if (indexStats.dimensions === 0) {
@@ -130,11 +126,7 @@ class TinyVecClient {
       });
 
       // Copy original files to temp
-      await Promise.all([
-        fsPromises.copyFile(origFiles.base, tempFiles.base),
-        fsPromises.copyFile(origFiles.idx, tempFiles.idx),
-        fsPromises.copyFile(origFiles.meta, tempFiles.meta),
-      ]);
+      await fsPromises.copyFile(this.filePath, tempFilePath);
 
       // Insert data
       const inserted = await nativeInsert(
@@ -147,12 +139,8 @@ class TinyVecClient {
         return 0;
       }
 
-      // "Atomic" rename of temp files to original
-      await Promise.all([
-        fsPromises.rename(tempFiles.base, origFiles.base),
-        fsPromises.rename(tempFiles.idx, origFiles.idx),
-        fsPromises.rename(tempFiles.meta, origFiles.meta),
-      ]);
+      // Rename of temp file to original
+      await fsPromises.rename(tempFilePath, this.filePath);
 
       // Update DB file connection
       nativeUpdateDbFileConnection(this.filePath);
@@ -162,11 +150,91 @@ class TinyVecClient {
       throw error;
     } finally {
       // Clean up temp files regardless of success or failure
-      await Promise.all([
-        fsPromises.unlink(tempFiles.base).catch(() => {}),
-        fsPromises.unlink(tempFiles.idx).catch(() => {}),
-        fsPromises.unlink(tempFiles.meta).catch(() => {}),
-      ]);
+
+      await fsPromises.unlink(tempFilePath).catch(() => {});
+    }
+  }
+
+  async deleteByIds(ids: number[]): Promise<tinyvecTypes.DeletionResult> {
+    if (!ids || !ids.length) {
+      return { deletedCount: 0, success: false };
+    }
+    let tempFilePath = `${this.filePath}.temp`;
+    try {
+      // first copy the vector file to a temp file
+      const indexStats = await nativeGetIndexStats(this.filePath);
+      if (!indexStats || !indexStats.vectors) {
+        return { deletedCount: 0, success: false };
+      }
+      // Write the header to the temp file
+      await tinyvecUtils.writeFileHeader(
+        tempFilePath,
+        indexStats.vectors,
+        indexStats.dimensions
+      );
+      const deletionResult = await nativeDeleteVectorsByIds(this.filePath, ids);
+
+      await fsPromises.rename(tempFilePath, this.filePath);
+
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
+
+      return deletionResult;
+    } catch (error) {
+      throw error;
+    } finally {
+      // Clean up temp files regardless of success or failure
+      await fsPromises.unlink(tempFilePath).catch(() => {});
+    }
+  }
+
+  async deleteByFilter(
+    options: tinyvecTypes.TinyVecSearchOptions
+  ): Promise<tinyvecTypes.DeletionResult> {
+    if (!options) {
+      throw new Error("No options provided");
+    }
+
+    if (!options.filter) {
+      throw new Error("No filter provided");
+    }
+    let tempFilePath = `${this.filePath}.temp`;
+    try {
+      const indexStats = await nativeGetIndexStats(this.filePath);
+      if (!indexStats || !indexStats.vectors) {
+        return { deletedCount: 0, success: false };
+      }
+      // Write the header to the temp file
+      await tinyvecUtils.writeFileHeader(
+        tempFilePath,
+        indexStats.vectors,
+        indexStats.dimensions
+      );
+      const filterStr = JSON.stringify(options.filter);
+      const deletionResult = await nativeDeleteVectorsByFilter(
+        this.filePath,
+        filterStr
+      );
+
+      if (!deletionResult.deletedCount) {
+        nativeUpdateDbFileConnection(this.filePath);
+        return {
+          deletedCount: 0,
+          success: false,
+        };
+      }
+
+      await fsPromises.rename(tempFilePath, this.filePath);
+
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
+
+      return deletionResult;
+    } catch (error) {
+      throw error;
+    } finally {
+      // Clean up temp files regardless of success or failure
+      await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 
@@ -176,11 +244,11 @@ class TinyVecClient {
 }
 
 export { TinyVecClient };
-// export * from "./types";
 export type {
   TinyVecInsertion,
   TinyVecSearchResult,
   IndexFileStats,
   TinyVecConfig,
   JsonValue,
+  TinyVecSearchOptions,
 } from "./types";

@@ -69,6 +69,13 @@ class TinyVecIndexStats(ctypes.Structure):
     ]
 
 
+class DBSearchResult(ctypes.Structure):
+    _fields_ = [
+        ("results", ctypes.POINTER(VecResult)),
+        ("count", ctypes.c_int)
+    ]
+
+
 # Load the library
 lib = ctypes.CDLL(str(get_lib_path()))
 
@@ -81,7 +88,15 @@ lib.get_top_k.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float32),
     ctypes.c_int
 ]
-lib.get_top_k.restype = ctypes.POINTER(VecResult)
+lib.get_top_k.restype = ctypes.POINTER(DBSearchResult)
+
+lib.get_top_k_with_filter.argtypes = [
+    ctypes.c_char_p,
+    np.ctypeslib.ndpointer(dtype=np.float32),
+    ctypes.c_int,
+    ctypes.c_char_p
+]
+lib.get_top_k_with_filter.restype = ctypes.POINTER(DBSearchResult)
 
 lib.get_index_stats.argtypes = [ctypes.c_char_p]
 lib.get_index_stats.restype = TinyVecIndexStats
@@ -98,3 +113,16 @@ lib.insert_data.restype = ctypes.c_size_t
 
 lib.update_db_file_connection.argtypes = [ctypes.c_char_p]
 lib.update_db_file_connection.restype = ctypes.c_bool
+
+lib.delete_data_by_ids.argtypes = [
+    ctypes.c_char_p,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int
+]
+lib.delete_data_by_ids.restype = ctypes.c_int
+
+lib.delete_data_by_filter.argtypes = [
+    ctypes.c_char_p,
+    ctypes.c_char_p
+]
+lib.delete_data_by_filter.restype = ctypes.c_int

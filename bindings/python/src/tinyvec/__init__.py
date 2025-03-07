@@ -2,15 +2,16 @@
 Tinyvec - A tiny vector database for Python
 """
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 
 from .client import TinyVecClient
-from .models import TinyVecConfig, TinyVecResult, TinyVecInsertion, TinyVecIndexStats
+from .models import ClientConfig, SearchResult, Insertion, IndexStats, SearchOptions
 
 __all__ = [
     'TinyVecClient',
-    'TinyVecConfig',
-    'TinyVecResult',
-    'TinyVecInsertion',
-    'TinyVecIndexStats'
+    'ClientConfig',
+    'SearchResult',
+    'Insertion',
+    'IndexStats',
+    'SearchOptions'
 ]

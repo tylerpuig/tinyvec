@@ -16,6 +16,12 @@ typedef struct VecResult
     MetadataBytes metadata;
 } VecResult;
 
+typedef struct DBSearchResult
+{
+    VecResult *results;
+    int count;
+} DBSearchResult;
+
 typedef struct TinyVecConnectionConfig
 {
     uint32_t dimensions;

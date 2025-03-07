@@ -2,7 +2,8 @@
 export type NativeSearchFunction = <TMeta = any>(
   query: Float32Array,
   topK: number,
-  filePath: string
+  filePath: string,
+  options?: Record<string, any>
 ) => Promise<TinyVecSearchResult<TMeta>[]>;
 
 export type NativeInsertFunction = (
@@ -10,6 +11,16 @@ export type NativeInsertFunction = (
   vectors: TinyVecInsertion[],
   dimensions: number
 ) => Promise<number>;
+
+export type DeleteVectorsByIdsFunction = (
+  filePath: string,
+  ids: number[]
+) => Promise<DeletionResult>;
+
+export type DeleteVectorsByFilterFunction = (
+  filePath: string,
+  jsonFilter: string
+) => Promise<DeletionResult>;
 
 export type NativeConnectFunction = (
   filePath: string,
@@ -25,9 +36,18 @@ export type NativeUpdateDbFileConnectionFunction = (
 ) => boolean;
 
 export type TinyVecSearchResult<TMeta = any> = {
-  index: number;
+  id: number;
   similarity: number;
   metadata: TMeta;
+};
+
+export type DeletionResult = {
+  deletedCount: number;
+  success: boolean;
+};
+
+export type DeleteByFilterOptions = {
+  filter: Record<string, any>;
 };
 
 export type IndexFileStats = {
@@ -37,6 +57,10 @@ export type IndexFileStats = {
 
 export type TinyVecConfig = {
   dimensions: number;
+};
+
+export type TinyVecSearchOptions = {
+  filter?: Record<string, any>;
 };
 
 export type NumericArray =

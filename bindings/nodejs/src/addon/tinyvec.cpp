@@ -3,16 +3,30 @@
 #include "../../../src/core/include/file.h"
 #include <iostream>
 
-extern "C" VecResult *vector_query(const char *file_path, const float *query_vec, const int top_k)
+extern "C" DBSearchResult *vector_query(const char *file_path, const float *query_vec, const int top_k)
 {
     return get_top_k(file_path, query_vec, top_k);
+}
+
+extern "C" DBSearchResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter)
+{
+    return get_top_k_with_filter(file_path, query_vec, top_k, json_filter);
+}
+
+extern "C" int delete_vecs_by_ids(const char *file_path, int *ids_to_delete, int delete_count)
+{
+    return delete_data_by_ids(file_path, ids_to_delete, delete_count);
+}
+
+extern "C" int delete_vecs_by_filter(const char *file_path, const char *json_filter)
+{
+    return delete_data_by_filter(file_path, json_filter);
 }
 
 extern "C" int insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                                    const size_t vec_count, const uint32_t dimensions)
 {
-    int inserted_vecs = insert_data(file_path, vectors, metadatas, metadata_lengths, vec_count, dimensions);
-    return inserted_vecs;
+    return insert_data(file_path, vectors, metadatas, metadata_lengths, vec_count, dimensions);
 }
 
 extern "C" TinyVecConnection *connect_to_db(const char *file_path, const TinyVecConnectionConfig *config)

@@ -1,7 +1,7 @@
 [project]
 name = "tinyvecdb"
 keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
-version = "0.1.3"
+version = "0.2.0"
 description = "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search."
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -38,10 +38,24 @@ package-data = {"tinyvec.core" = ["*.dll", "*.so", "*.dylib"]}
 [tool.setuptools.exclude-package-data]
 "*" = ["tests", "*.tests", "*.tests.*"]
 
+
+[tool.poetry.group.dev.dependencies]
+build = "^1.2.2.post1"
+setuptools = "^75.8.2"
+wheel = "^0.45.1"
+pytest = "^8.3.5"
+pytest-asyncio = "^0.25.3"
+twine = "^6.1.0"
+
+[tool.poetry]
+packages = [ { include = "tinyvec", from = "src" }]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.4",
-    "pytest-asyncio>=0.25.3"
+    "pytest-asyncio>=0.25.3",
+    "setuptools>=75.8.0",
+    "wheel>=0.45.1"
 ]
 
 [project.urls]

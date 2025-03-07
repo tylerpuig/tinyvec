@@ -31,19 +31,11 @@ def create_db_files(file_path: str, dimensions: int = 0):
             f.flush()
             os.fsync(f.fileno())
 
-        # Create empty metadata files
-        for suffix in ['.idx', '.meta']:
-            with open(absolute_path + suffix, 'xb') as f:
-                f.flush()
-                os.fsync(f.fileno())
-
     except FileExistsError as e:
-        # Clean up any partially created files
-        for path in [absolute_path, absolute_path + '.idx', absolute_path + '.meta']:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
+        try:
+            os.unlink(absolute_path)
+        except FileNotFoundError:
+            pass
         raise FileExistsError(
             f"One or more vector files already exist at {absolute_path}") from e
 
@@ -87,3 +79,22 @@ def get_float32_array(query_vec: VectorInput) -> np.ndarray:
         query_vec_float32 = np.asarray(query_vec, dtype=np.float32)
 
     return query_vec_float32
+
+
+def write_file_header(file_path: str, vectors: int, dims: int) -> None:
+    """Write the tinyvec file header to initialize a file."""
+    # Create a bytearray for the header data (8 bytes total)
+    header = bytearray(8)
+
+    # Write vectors count and dimensions as 32-bit integers
+    struct.pack_into('<ii', header, 0, vectors, dims)
+
+    try:
+        # Open the file in write binary mode, creating it if it doesn't exist
+        with open(file_path, 'wb') as f:
+            f.write(header)
+            # Force flush to disk
+            f.flush()
+            os.fsync(f.fileno())  # Ensure data is written to disk
+    except Exception as e:
+        raise RuntimeError(f"Failed to write file header: {e}") from e

@@ -10,10 +10,14 @@ extern "C"
 {
 #endif
 
-    VecResult *vector_query(const char *file_path, const float *query_vec, const int top_k);
+    DBSearchResult *vector_query(const char *file_path, const float *query_vec, const int top_k);
+    DBSearchResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter);
+    int delete_vecs_by_ids(const char *file_path, int *ids_to_delete, int delete_count);
+    int delete_vecs_by_filter(const char *file_path, const char *json_filter);
 
-    int insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
-                            const size_t vec_count, const uint32_t dimensions);
+    int
+    insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
+                        const size_t vec_count, const uint32_t dimensions);
 
     TinyVecConnection *connect_to_db(const char *file_path, const TinyVecConnectionConfig *config);
 
