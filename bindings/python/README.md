@@ -23,50 +23,65 @@ TinyVecDB is an embedded vector database that emphasizes speed, low memory usage
 - **Embeddings**: Fixed-dimension float vectors (e.g., 512 dimensions)
 - **Metadata**: JSON-serializable data associated with each vector
 - **Similarity Search**: Finding the nearest neighbors to a query vector using cosine similarity
+- **Filtering**: Query vectors based on metadata attributes
 
 ## Basic Usage
 
 ```python
 import asyncio
-import random
 import numpy as np
-from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
+import tinyvec
 
 async def example():
     # Connect to database (will create the file if it doesn't exist)
-    client = TinyVecClient()
-    config = TinyVecConfig(dimensions=512)
+    client = tinyvec.TinyVecClient()
+    config = tinyvec.ClientConfig(dimensions=512)
     client.connect("./vectors.db", config)
 
-    # Create a sample vector
-    vector = np.random.rand(512).astype(np.float32)
-
+    # Create sample vectors
     insertions = []
     for i in range(50):
         # Using NumPy (more efficient)
         vec = np.random.rand(512).astype(np.float32)
+        vec = vec / np.linalg.norm(vec)  # Normalize the vector
+
         # Or using standard Python lists
         # vec = [random.random() for _ in range(512)]
 
-        insertions.append(TinyVecInsertion(
+        insertions.append(tinyvec.Insertion(
             vector=vec,
-            metadata={"id": i}
+            metadata={"name": f"item-{i}", "category": "example"}
         ))
 
     # Insert vectors
     inserted = await client.insert(insertions)
     print("Inserted:", inserted)
 
-    # Search for similar vectors
-    results = await client.search(vector, 5)
+    # Search for similar vectors (without filtering)
+    query_vec = np.random.rand(512).astype(np.float32)
+    results = await client.search(query_vec, 5)
+    # Example results:
+    # [SearchResult(similarity=0.801587700843811, id=8, metadata={'category': 'example', 'name': 'item-8'}),
+    #  SearchResult(similarity=0.7834401726722717, id=16, metadata={'category': 'example', 'name': 'item-16'}),
+    #  SearchResult(similarity=0.7815409898757935, id=5, metadata={'category': 'example', 'name': 'item-5'})]
 
-    # Example output of search results:
-    """
-    [TinyVecResult(similarity=0.801587700843811, index=8, metadata={'id': 8}),
-     TinyVecResult(similarity=0.7834401726722717, index=16, metadata={'id': 16}),
-     TinyVecResult(similarity=0.7815409898757935, index=5, metadata={'id': 5}),
-     ...]
-    """
+    # Search with filtering
+    search_options = tinyvec.SearchOptions(
+        filter={"category": {"$eq": "example"}}
+    )
+    filtered_results = await client.search(query_vec, 5, search_options)
+
+    # Delete items by ID
+    delete_result = await client.delete_by_ids([1, 2, 3])
+    print(f"Deleted {delete_result.deleted_count} vectors. Success: {delete_result.success}")
+
+    # Delete by metadata filter
+    filter_result = await client.delete_by_filter(search_options)
+    print(f"Deleted {filter_result.deleted_count} vectors by filter. Success: {filter_result.success}")
+
+    # Get database statistics
+    stats = await client.get_index_stats()
+    print(f"Database has {stats.vector_count} vectors with {stats.dimensions} dimensions")
 
 if __name__ == "__main__":
     asyncio.run(example())
@@ -87,7 +102,7 @@ Creates a new TinyVecDB client instance.
 **Example:**
 
 ```python
-client = TinyVecClient()
+client = tinyvec.TinyVecClient()
 ```
 
 ##### `connect(path, config)`
@@ -97,12 +112,12 @@ Connects to a TinyVecDB database.
 **Parameters:**
 
 - `path`: `str` - Path to the database file
-- `config`: `TinyVecConfig` - Configuration options
+- `config`: `ClientConfig` - Configuration options
 
 **Example:**
 
 ```python
-config = TinyVecConfig(dimensions=512)
+config = tinyvec.ClientConfig(dimensions=512)
 client.connect("./vectors.db", config)
 ```
 
@@ -114,7 +129,7 @@ Inserts vectors with metadata into the database. Each metadata item must be a JS
 
 **Parameters:**
 
-- `vectors`: `List[TinyVecInsertion]` - List of vectors to insert
+- `vectors`: `List[Insertion]` - List of vectors to insert
 
 **Returns:**
 
@@ -125,14 +140,15 @@ Inserts vectors with metadata into the database. Each metadata item must be a JS
 ```python
 vector = np.zeros(512, dtype=np.float32) + 0.1
 count = await client.insert([
-  TinyVecInsertion(
+  tinyvec.Insertion(
     vector=vector,
-    metadata={"id": "doc1", "title": "Example Document"}
+    metadata={"document_id": "doc1", "title": "Example Document", "category": "reference"}
   )
 ])
+# Example: count = 1
 ```
 
-##### `async search(query_vector, top_k)`
+##### `async search(query_vector, top_k, search_options=None)`
 
 Searches for the most similar vectors to the query vector.
 
@@ -147,15 +163,69 @@ Searches for the most similar vectors to the query vector.
   Internally, it will be converted to a float32 array for similarity calculations.
 
 - `top_k`: `int` - Number of results to return
+- `search_options`: `SearchOptions` - Optional. Contains filter criteria for the search.
 
 **Returns:**
 
-- `List[TinyVecResult]` - List of search results
+- `List[SearchResult]` - List of search results
 
 **Example:**
 
 ```python
+# Search without filtering
 results = await client.search(query_vector, 10)
+# Example results:
+# [SearchResult(similarity=0.801587700843811, id=8, metadata={'id': 8}),
+#  SearchResult(similarity=0.7834401726722717, id=16, metadata={'id': 16}),
+#  SearchResult(similarity=0.7815409898757935, id=5, metadata={'id': 5})]
+
+# Search with filtering
+search_options = tinyvec.SearchOptions(
+    filter={"year": {"$eq": 2024}}
+)
+filtered_results = await client.search(query_vector, 10, search_options)
+```
+
+##### `async delete_by_ids(ids)`
+
+Deletes vectors by their IDs.
+
+**Parameters:**
+
+- `ids`: `List[int]` - List of vector IDs to delete
+
+**Returns:**
+
+- `DeletionResult` - Object containing deletion count and success status
+
+**Example:**
+
+```python
+result = await client.delete_by_ids([1, 2, 3])
+print(f"Deleted {result.deleted_count} vectors. Success: {result.success}")
+# Example output: Deleted 3 vectors. Success: True
+```
+
+##### `async delete_by_filter(search_options)`
+
+Deletes vectors that match the given filter criteria.
+
+**Parameters:**
+
+- `search_options`: `SearchOptions` - Contains filter criteria for deletion
+
+**Returns:**
+
+- `DeletionResult` - Object containing deletion count and success status
+
+**Example:**
+
+```python
+search_options = tinyvec.SearchOptions(
+    filter={"year": {"$eq": 2024}}
+)
+result = await client.delete_by_filter(search_options)
+print(f"Deleted {result.deleted_count} vectors. Success: {result.success}")
 ```
 
 ##### `async get_index_stats()`
@@ -168,7 +238,7 @@ Retrieves statistics about the database.
 
 **Returns:**
 
-- `TinyVecStats` - Database statistics
+- `Stats` - Database statistics
 
 **Example:**
 
@@ -177,4 +247,139 @@ stats = await client.get_index_stats()
 print(
   f"Database has {stats.vector_count} vectors with {stats.dimensions} dimensions"
 )
+# Example output: Database has 47 vectors with 512 dimensions
+```
+
+### Supporting Classes
+
+#### `DeletionResult`
+
+Result from delete operations.
+
+**Properties:**
+
+- `deleted_count`: `int` - Number of vectors deleted
+- `success`: `bool` - Whether the operation was successful
+
+**Example:**
+
+```python
+result = await client.delete_by_ids([1, 2, 3])
+if result.success:
+    print(f"Successfully deleted {result.deleted_count} vectors")
+else:
+    print("Deletion operation failed")
+# Example output: Successfully deleted 3 vectors
+```
+
+#### `ClientConfig`
+
+Configuration for the vector database.
+
+**Parameters:**
+
+- `dimensions`: `int` - The dimensionality of vectors to be stored
+
+**Example:**
+
+```python
+config = tinyvec.ClientConfig(dimensions=512)
+```
+
+#### `Insertion`
+
+Class representing a vector to be inserted.
+
+**Parameters:**
+
+- `vector`: `Union[List[float], np.ndarray]` - The vector data
+- `metadata`: `Dict` - JSON-serializable metadata associated with the vector
+
+**Example:**
+
+```python
+insertion = tinyvec.Insertion(
+    vector=np.random.rand(512).astype(np.float32),
+    metadata={"category": "example"}
+)
+```
+
+#### `SearchOptions`
+
+Options for search queries, including filtering.
+
+**Parameters:**
+
+- `filter`: `Dict` - Filter criteria in MongoDB-like query syntax
+
+Available filter operators:
+
+- `$eq`: Matches values equal to a specified value
+- `$gt`: Matches values greater than a specified value
+- `$gte`: Matches values greater than or equal to a specified value
+- `$in`: Matches any values specified in an array
+- `$lt`: Matches values less than a specified value
+- `$lte`: Matches values less than or equal to a specified value
+- `$ne`: Matches values not equal to a specified value
+- `$nin`: Matches none of the values specified in an array
+
+Filters can be nested for complex queries.
+
+**Example:**
+
+```python
+# Simple filter
+search_options = tinyvec.SearchOptions(
+    filter={"make": {"$eq": "Toyota"}}
+)
+
+# Complex nested filter
+search_options = tinyvec.SearchOptions(
+    filter={
+        "category": {
+            "subcategory": {
+                "value": {"$gt": 200}
+            }
+        },
+        "tags": {"$in": ["premium", "featured"]}
+    }
+)
+```
+
+#### `SearchResult`
+
+Class representing a search result.
+
+**Properties:**
+
+- `similarity`: `float` - Cosine similarity score
+- `id`: `int` - ID of the matched vector
+- `metadata`: `Dict | None` - Metadata associated with the matched vector
+
+**Example:**
+
+```python
+# Results from a search query
+for result in results:
+    print(f"ID: {result.id}, Similarity: {result.similarity}, Metadata: {result.metadata}")
+# Example output:
+# ID: 34, Similarity: 0.8109967303276062, Metadata: {'category': 'example', 'name': 'item-34'}
+# ID: 46, Similarity: 0.789353609085083, Metadata: {'category': 'example', 'name': 'item-46'}
+# ID: 22, Similarity: 0.7870827913284302, Metadata: {'category': 'example', 'name': 'item-22'}
+```
+
+#### `Stats`
+
+Class representing database statistics.
+
+**Properties:**
+
+- `vector_count`: `int` - Number of vectors in the database
+- `dimensions`: `int` - Dimensionality of the vectors
+
+**Example:**
+
+```python
+stats = await client.get_index_stats()
+print(f"Vector count: {stats.vector_count}, Dimensions: {stats.dimensions}")
 ```

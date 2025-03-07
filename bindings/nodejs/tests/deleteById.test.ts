@@ -65,7 +65,7 @@ describe("TinyVecClient Delete By Id", () => {
     expect(searchResult).toHaveLength(1);
     expect(searchResult[0]?.metadata.category).toBe("even");
 
-    const itemId = searchResult[0].index;
+    const itemId = searchResult[0].id;
 
     const deleteByIdResult = await newClient.deleteByIds([itemId]);
 
@@ -100,7 +100,7 @@ describe("TinyVecClient Delete By Id", () => {
       true
     );
 
-    const itemIds = searchResult.map((r) => r.index);
+    const itemIds = searchResult.map((r) => r.id);
 
     const deleteByIdResult = await newClient.deleteByIds(itemIds);
 
