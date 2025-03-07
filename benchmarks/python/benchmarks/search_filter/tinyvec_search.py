@@ -3,7 +3,7 @@ from benchmarks.constants import (
 )
 from benchmarks.utils import (
     generate_random_embeddings, get_stable_memory_usage, warmup_memory,
-    get_avg_search_time, get_memory_usage, save_metrics, QueryMetrics
+    get_avg_search_time, save_metrics, QueryMetrics
 )
 from typing import List
 import tinyvec
@@ -20,7 +20,7 @@ async def main():
     init_memory = get_stable_memory_usage()
 
     client = tinyvec.TinyVecClient()
-    config = tinyvec.TinyVecConfig(dimensions=DIMENSIONS)
+    config = tinyvec.ClientConfig(dimensions=DIMENSIONS)
 
     client.connect(
         TINYVEC_PATH, config)
@@ -29,12 +29,16 @@ async def main():
 
     query_vec = generate_random_embeddings(1, DIMENSIONS)[0]
 
+    search_options = tinyvec.SearchOptions(
+        filter={"type": {"$eq": "even"}}
+    )
+
     # Perform search and measure time
     print("Performing search...")
     query_times: List[float] = []
-    for i in range(QUERY_ITERATIONS):
+    for _ in range(QUERY_ITERATIONS):
         start_query_time = time.time()
-        await client.search(query_vec, TOP_K)
+        await client.search(query_vec, TOP_K, search_options)
         end_query_time = time.time()
         total_time = end_query_time - start_query_time
         print(f"Query time: {total_time * 1000:.2f}ms")
@@ -50,7 +54,8 @@ async def main():
         database_title="TinyVec",
         query_time=avg_search_time,
         initial_memory=init_memory,
-        final_memory=final_memory
+        final_memory=final_memory,
+        benchmark_type="Metadata Filter"
     )
 
     save_metrics(query_metrics)

@@ -63,10 +63,9 @@ def main():
         database_title="SQLite-Vec",
         query_time=avg_time,
         initial_memory=init_memory,
-        final_memory=final_memory
+        final_memory=final_memory,
+        benchmark_type="Vector Search"
     )
-
-    print(query_metrics)
 
     save_metrics(query_metrics)
 

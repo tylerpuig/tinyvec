@@ -1,7 +1,7 @@
 import lancedb
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from tinyvec import TinyVecClient, TinyVecConfig, TinyVecInsertion
+import tinyvec
 import chromadb
 import sqlite3
 import sqlite_vec
@@ -43,64 +43,72 @@ def ensure_directories_exist():
         print(f"Created directory: {directory}")
 
 
-def generate_metadata(index, for_chroma=False):
+def generate_metadata(index):
     """
     Generate metadata with multiple fields including nested structure and arrays.
     Using modulo to make half of the entries have different values.
 
     Args:
         index: The index of the item
-        for_chroma: If True, generates a flattened metadata format compatible with ChromaDB
     """
-    if for_chroma:
-        # ChromaDB doesn't support arrays or nested objects in metadata
-        # Flatten the structure and convert arrays to strings
-        metadata = {
-            "id": index,
-            "created_at": "2025-03-05T12:00:00Z",
-            "tags": "vector,embedding,test",  # Convert array to string
-            "numeric_values": ",".join([str(round(random.random(), 4)) for _ in range(5)]),
-            "nested_level2": "nested value",
-            "nested_priority": random.randint(1, 10)
-        }
-
-        if index % 2 == 0:
-            metadata["type"] = "even"
-            metadata["category"] = "category_a"
-            metadata["nested_status"] = "active"
-            metadata["importance"] = "high"
-        else:
-            metadata["type"] = "odd"
-            metadata["category"] = "category_b"
-            metadata["nested_status"] = "pending"
-            metadata["importance"] = "medium"
-    else:
-        # Rich metadata structure for other databases
-        metadata = {
-            "id": index,
-            "created_at": "2025-03-05T12:00:00Z",
-            "tags": ["vector", "embedding", "test"],
-            # Array of numbers
-            "numeric_values": [random.random() for _ in range(5)],
-            "nested": {
-                "level1": {
-                    "level2": "nested value",
-                    "priority": random.randint(1, 10)
-                }
+    # Rich metadata structure for other databases
+    metadata = {
+        "id": index,
+        "created_at": "2025-03-05T12:00:00Z",
+        "tags": ["vector", "embedding", "test"],
+        # Array of numbers
+        "numeric_values": [random.random() for _ in range(5)],
+        "nested": {
+            "level1": {
+                "level2": "nested value",
+                "priority": random.randint(1, 10)
             }
         }
+    }
 
-        # For half the entries (using modulo), add different values
-        if index % 2 == 0:
-            metadata["type"] = "even"
-            metadata["category"] = "category_a"
-            metadata["nested"]["level1"]["status"] = "active"
-            metadata["importance"] = "high"
-        else:
-            metadata["type"] = "odd"
-            metadata["category"] = "category_b"
-            metadata["nested"]["level1"]["status"] = "pending"
-            metadata["importance"] = "medium"
+    # For half the entries (using modulo), add different values
+    if index % 2 == 0:
+        metadata["type"] = "even"
+        metadata["category"] = "category_a"
+        metadata["nested"]["level1"]["status"] = "active"
+        metadata["importance"] = "high"
+    else:
+        metadata["type"] = "odd"
+        metadata["category"] = "category_b"
+        metadata["nested"]["level1"]["status"] = "pending"
+        metadata["importance"] = "medium"
+
+    return metadata
+
+
+def generate_chroma_metadata(index):
+    """
+    Generate metadata specifically formatted for ChromaDB.
+
+    Args:
+        index: The index of the item
+    """
+    # ChromaDB doesn't support arrays or nested objects in metadata
+    # Flatten the structure and convert arrays to strings
+    metadata = {
+        "id": index,
+        "created_at": "2025-03-05T12:00:00Z",
+        "tags": "vector,embedding,test",  # Convert array to string
+        "numeric_values": ",".join([str(round(random.random(), 4)) for _ in range(5)]),
+        "nested_level2": "nested value",
+        "nested_priority": random.randint(1, 10)
+    }
+
+    if index % 2 == 0:
+        metadata["type"] = "even"
+        metadata["category"] = "category_a"
+        metadata["nested_status"] = "active"
+        metadata["importance"] = "high"
+    else:
+        metadata["type"] = "odd"
+        metadata["category"] = "category_b"
+        metadata["nested_status"] = "pending"
+        metadata["importance"] = "medium"
 
     return metadata
 
@@ -111,12 +119,18 @@ async def main():
     # === LanceDB ===
     lance_db_connection = lancedb.connect(LANCEDB_PATH)
 
+    # For LanceDB, move "type" field to top level instead of in metadata
     data_rows = []
     for i in range(INSERTION_COUNT):
         metadata = generate_metadata(i)
+
+        # Extract "type" from metadata to make it a top-level column
+        type_value = metadata.pop("type")  # Remove from metadata
+
         row = {
             "vector": np.random.rand(DIMENSIONS),
             "text": f"New text {i}",
+            "type": type_value,  # Add as separate column
             "metadata": metadata
         }
         data_rows.append(row)
@@ -201,8 +215,8 @@ async def main():
         chroma_embeddings.append(np.random.random(512).astype(np.float32))
         chroma_docs.append("item-" + str(i))
         chroma_ids.append(str(i))
-        # Use the Chroma-compatible metadata format
-        chroma_metadatas.append(generate_metadata(i, for_chroma=True))
+        # Use the specific Chroma-compatible metadata format
+        chroma_metadatas.append(generate_chroma_metadata(i))
 
     chroma_batch_size = 5_000
 
@@ -219,13 +233,14 @@ async def main():
         )
 
     # === TinyVec ===
-    tinyvec_client = TinyVecClient()
-    tinyvec_client.connect(TINYVEC_PATH, TinyVecConfig(dimensions=DIMENSIONS))
+    tinyvec_client = tinyvec.TinyVecClient()
+    tinyvec_client.connect(
+        TINYVEC_PATH, tinyvec.ClientConfig(dimensions=DIMENSIONS))
 
     tinyvec_insertions = []
     for i in range(INSERTION_COUNT):
         metadata = generate_metadata(i)
-        tinyvec_insertions.append(TinyVecInsertion(
+        tinyvec_insertions.append(tinyvec.Insertion(
             vector=[random.random() for _ in range(DIMENSIONS)],
             metadata=metadata
         ))

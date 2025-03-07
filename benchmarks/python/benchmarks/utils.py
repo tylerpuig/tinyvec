@@ -71,6 +71,7 @@ class QueryMetrics:
     query_time: float
     initial_memory: Dict[str, float]
     final_memory: Dict[str, float]
+    benchmark_type: str
 
 
 def save_metrics(metrics: QueryMetrics, filename: str = 'metrics.json'):
@@ -79,7 +80,8 @@ def save_metrics(metrics: QueryMetrics, filename: str = 'metrics.json'):
         'initial_memory': metrics.initial_memory,
         'final_memory': metrics.final_memory,
         'query_time': metrics.query_time,
-        'database_title': metrics.database_title
+        'database_title': metrics.database_title,
+        'benchmark_type': metrics.benchmark_type,
     }
 
     # Load existing data if file exists

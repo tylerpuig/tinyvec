@@ -7,7 +7,7 @@ from benchmarks.utils import (
     get_avg_search_time, get_memory_usage, save_metrics, QueryMetrics
 )
 from typing import List
-from tinyvec import TinyVecClient, TinyVecConfig
+import tinyvec
 import asyncio
 import time
 import sys
@@ -20,8 +20,8 @@ async def main():
     warmup_memory()
     init_memory = get_stable_memory_usage()
 
-    client = TinyVecClient()
-    config = TinyVecConfig(dimensions=DIMENSIONS)
+    client = tinyvec.TinyVecClient()
+    config = tinyvec.ClientConfig(dimensions=DIMENSIONS)
 
     client.connect(
         TINYVEC_PATH, config)
@@ -51,7 +51,8 @@ async def main():
         database_title="TinyVec",
         query_time=avg_search_time,
         initial_memory=init_memory,
-        final_memory=final_memory
+        final_memory=final_memory,
+        benchmark_type="Vector Search"
     )
 
     save_metrics(query_metrics)

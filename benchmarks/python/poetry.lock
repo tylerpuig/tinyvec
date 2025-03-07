@@ -400,7 +400,7 @@ description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 groups = ["main"]
-markers = "(platform_system == \"Windows\" or os_name == \"nt\" or sys_platform == \"win32\") and (python_version <= \"3.11\" or python_version >= \"3.12\")"
+markers = "(os_name == \"nt\" or platform_system == \"Windows\" or sys_platform == \"win32\") and (python_version <= \"3.11\" or python_version >= \"3.12\")"
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
@@ -2808,23 +2808,22 @@ test = ["pytest", "tornado (>=4.5)", "typeguard"]
 
 [[package]]
 name = "tinyvecdb"
-version = "0.1.2"
+version = "0.2.0"
 description = "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "tinyvecdb-0.1.2-py3-none-win_amd64.whl", hash = "sha256:80e79dd0121bd14f3acae6d4c948bf893a5a3a1a82d6c2518d7964efeadc24fa"},
-    {file = "tinyvecdb-0.1.2.tar.gz", hash = "sha256:cc09fd7eacb32389da66d557262b9fe6e811b895e4677074000aa1d5c88e6ebd"},
+    {file = "tinyvecdb-0.2.0-py3-none-win_amd64.whl", hash = "sha256:ee73bde9fe415721929040bcdcd5499bcce30f7b9f030f07be718c4c9c046a07"},
+    {file = "tinyvecdb-0.2.0.tar.gz", hash = "sha256:d7ae93682b8ffa51a7705fd40da6ec2c0ca491dc95bba92f7e8fdf851a729cfd"},
 ]
 
 [package.dependencies]
 numpy = ">=1.20.0"
-typing_extensions = ">=4.0.0"
 
 [package.extras]
-dev = ["pytest (>=8.3.4)", "pytest-asyncio (>=0.25.3)"]
+dev = ["pytest (>=8.3.4)", "pytest-asyncio (>=0.25.3)", "setuptools (>=75.8.0)", "wheel (>=0.45.1)"]
 
 [[package]]
 name = "tokenizers"
@@ -3368,4 +3367,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "81b2668c5322997328e03ae4a5441fa30bcf3aa2e468146fb0280e6f02014856"
+content-hash = "2cab1472ca52681b1192e51b5282f212bb4b0fa2be5aba1ba0359b960990660f"

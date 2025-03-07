@@ -13,7 +13,7 @@ psutil = ">=7.0.0,<8.0.0"
 lancedb = ">=0.20.0,<0.21.0"
 qdrant-client = ">=1.13.2,<2.0.0"
 sqlite-vec = ">=0.1.6,<0.2.0"
-tinyvecdb = ">=0.1.2,<0.2.0"
+tinyvecdb = "^0.2.0"
 pandas = ">=2.2.3,<3.0.0"
 plotly = "^6.0.0"
 

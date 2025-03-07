@@ -24,7 +24,7 @@ FILTER_SEARCH_SCRIPTS = [
     'search_filter/qdrant_search.py',
     'search_filter/tinyvec_search.py',
     'search_filter/chroma_search.py',
-    'search_filter/sqlite_vec_search.py',
+    # 'search_filter/sqlite_vec_search.py',
     'search_filter/lance_search.py'
 ]
 
@@ -101,6 +101,9 @@ def parse_results(metrics_file: str = 'metrics.json', benchmark_type: str = 'Vec
         metrics_file: Path to metrics file
         benchmark_type: Type of benchmark for labeling
     """
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    metrics_file = os.path.join(script_dir, 'metrics.json')
     if not os.path.exists(metrics_file):
         raise FileNotFoundError(f"No results file found at {metrics_file}")
 

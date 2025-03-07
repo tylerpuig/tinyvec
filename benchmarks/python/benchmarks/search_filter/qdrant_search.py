@@ -72,7 +72,8 @@ async def main():
         database_title="Qdrant",
         query_time=avg_search_time,
         initial_memory=init_memory,
-        final_memory=final_memory
+        final_memory=final_memory,
+        benchmark_type="Metadata Filter"
     )
 
     save_metrics(query_metrics)
