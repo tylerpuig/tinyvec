@@ -272,7 +272,6 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     if (!header_info)
     {
-        printf("Failed to get header info\n");
         return NULL;
     }
 
@@ -293,13 +292,11 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     // Get filtered IDs from SQLite
     if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
     {
-        printf("Failed to get filtered IDs\n");
         free(sql_where);
         goto cleanup;
     }
 
     free(sql_where);
-    // If no results match the filter, return empty result
     if (filtered_count == 0)
     {
         free(header_info);
@@ -323,7 +320,7 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     if (!query_vec_norm)
     {
         free(header_info);
-        free(vec_buffer);
+        aligned_free(vec_buffer);
         return NULL;
     }
 
@@ -338,7 +335,7 @@ DBSearchResult *get_top_k_with_filter(const char *file_path, const float *query_
     {
         free(header_info);
         free(query_vec_norm);
-        free(vec_buffer);
+        aligned_free(vec_buffer);
         printf("Failed to create min heap\n");
         return NULL;
     }
@@ -455,7 +452,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     if (!header_info)
     {
-        printf("Failed to get header info\n");
         return NULL;
     }
 
@@ -479,7 +475,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     query_vec_norm = get_normalized_vector(query_vec, header_info->dimensions);
     if (!query_vec_norm)
     {
-        printf("Failed to normalize query vector\n");
         free(header_info);
         free(vec_buffer);
         return NULL;
@@ -494,7 +489,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     min_heap = createMinHeap(top_k);
     if (!min_heap)
     {
-        printf("Failed to create min heap\n");
         free(header_info);
         free(query_vec_norm);
         free(vec_buffer);
@@ -537,7 +531,6 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
     sorted = createVecResult(min_heap, top_k);
     if (!sorted)
     {
-        printf("Failed to create sorted results\n");
         goto cleanup;
     }
 
@@ -801,16 +794,14 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     char *temp_vec_file_path = malloc(strlen(file_path) + 6);
     if (!temp_vec_file_path)
     {
-        printf("no tem_vec_file_path\n");
-        return 0; // Return early if allocation fails
+        return 0;
     }
     sprintf(temp_vec_file_path, "%s.temp", file_path);
 
     FILE *vec_file = fopen(temp_vec_file_path, "r+b");
     if (!vec_file)
     {
-        printf("no vec file\n");
-        free(temp_vec_file_path); // Free before returning
+        free(temp_vec_file_path);
         return 0;
     }
 
@@ -852,7 +843,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     int rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
     if (rc != SQLITE_OK)
     {
-        printf("Transaction begin error: %s\n", err_msg);
+        printf("Transaction error: %s\n", err_msg);
         sqlite3_free(err_msg);
         free(vec_buffer);
         free(header_info);
@@ -881,7 +872,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     {
         if (!vectors[i] || !metadatas[i])
         {
-            printf("Invalid input at index %zu\n", i);
             continue;
         }
 
@@ -890,7 +880,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE)
         {
-            printf("Failed to insert metadata: %s\n", sqlite3_errmsg(connection->sqlite_db));
             continue; // Skip this vector but continue with others
         }
 
@@ -943,7 +932,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     }
     else
     {
-        printf("nothing was inserted\n");
         // If nothing was inserted, rollback
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
     }
@@ -1053,7 +1041,7 @@ bool update_db_file_connection(const char *file_path)
     if (!vec_file)
     {
         printf("Error: Could not open file: %s in update_db_file_connection\n", file_path);
-        perror("fopen error"); // Print the detailed error
+        perror("file open error"); // Print the detailed error
         return false;
     }
 
@@ -1108,10 +1096,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     // Calculate new vector count (original count minus deleted count)
     int new_vector_count = original_vector_count - delete_count;
 
-    // Write the new header to the temp file
-    // fwrite(&new_vector_count, sizeof(int), 1, temp_vec_file);
-    // fwrite(&header_info->dimensions, sizeof(uint32_t), 1, temp_vec_file);
-
     // Define buffer size (in number of vectors) and allocate buffer
     const int BUFFER_SIZE = 1024; // Adjust as needed for memory constraints
     const size_t vec_block_size = sizeof(float) * (header_info->dimensions + 1);
@@ -1131,13 +1115,10 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         return 0;
     }
 
-    // Start after the header in the original file
-    // Position file pointer at the beginning of vector data
-    // (header_info already moved the file pointer past the header)
-
     // Track how many vectors we've preserved
     int preserved_count = 0;
-    int write_buffer_count = 0; // Count of vectors in the write buffer
+    // Count of vectors in the write buffer
+    int write_buffer_count = 0;
 
     // Process the file in chunks
     for (uint64_t i = 0; i < header_info->vector_count; i += BUFFER_SIZE)
@@ -1151,7 +1132,7 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         {
             printf("Failed to read expected number of vectors: expected %d, got %zu\n",
                    vectors_to_read, read);
-            break; // Or handle the error as appropriate
+            continue;
         }
 
         // Process each vector in the read buffer
@@ -1195,7 +1176,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     free(write_buffer);
 
     int vectors_actually_removed = original_vector_count - preserved_count;
-    // int new_total_vector_count = original_vector_count - vectors_actually_removed;
 
     // go to start of file
     fseek(temp_vec_file, 0, SEEK_SET);
@@ -1221,7 +1201,6 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
         printf("Failed to begin transaction: %s\n", err_msg);
         sqlite3_free(err_msg);
         return 0;
-        // goto cleanup;
     }
 
     // Process deletions in batches
@@ -1287,13 +1266,11 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
 
     if (!sql_where)
     {
-        printf("Failed to convert JSON filter to SQL\n");
         return 0;
     }
 
     if (!get_filtered_ids(connection->sqlite_db, sql_where, &filtered_ids, &filtered_count))
     {
-        printf("Failed to get filtered IDs\n");
         free(sql_where);
         return 0;
     }
