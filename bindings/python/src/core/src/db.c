@@ -106,9 +106,13 @@ TinyVecConnection *create_tiny_vec_connection(const char *file_path, const uint3
     }
 
     // Path for SQLite database
-    char *sqlite_path = malloc(strlen(file_path) + 9); // +9 for ".metadata.db\0"
-    sprintf(sqlite_path, "%s.metadata.db", file_path);
-    if (!sqlite_path)
+    size_t sqlite_path_len = strlen(file_path) + strlen(".metadata.db") + 1; // +1 for null terminator
+    char *sqlite_path = malloc(sqlite_path_len);
+    if (sqlite_path)
+    {
+        snprintf(sqlite_path, sqlite_path_len, "%s.metadata.db", file_path);
+    }
+    else
     {
         free(header_info);
         fclose(vec_file);
@@ -441,7 +445,7 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
 
     // Get connection
     connection = get_tinyvec_connection(file_path);
-    if (!connection)
+    if (!connection || !connection->vec_file)
     {
         printf("Failed to get connection\n");
         return NULL;
@@ -542,6 +546,7 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
 
     if (vec_buffer)
         aligned_free(vec_buffer);
+    // free(vec_buffer);
     if (header_info)
         free(header_info);
     if (min_heap)
@@ -789,23 +794,23 @@ int get_metadata_batch(sqlite3 *db, VecResult *sorted, int count)
 int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                 const size_t vec_count, const uint32_t dimensions)
 {
-
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
     if (!connection || !connection->sqlite_db)
-    {
         return 0;
-    }
 
-    char *temp_vec_file_path = malloc(strlen(file_path) + 6); // +6 for ".temp\0"
-    sprintf(temp_vec_file_path, "%s.temp", file_path);
+    char *temp_vec_file_path = malloc(strlen(file_path) + 6);
     if (!temp_vec_file_path)
     {
-        return 0;
+        printf("no tem_vec_file_path\n");
+        return 0; // Return early if allocation fails
     }
-    FILE *vec_file = open_db_file(temp_vec_file_path);
+    sprintf(temp_vec_file_path, "%s.temp", file_path);
+
+    FILE *vec_file = fopen(temp_vec_file_path, "r+b");
     if (!vec_file)
     {
-        free(temp_vec_file_path);
+        printf("no vec file\n");
+        free(temp_vec_file_path); // Free before returning
         return 0;
     }
 
@@ -818,55 +823,43 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         return 0;
     }
 
-    bool reset_dimensions = false;
-    if (header_info->dimensions == 0 && header_info->dimensions != dimensions)
+    bool reset_dimensions = (header_info->dimensions == 0 && header_info->dimensions != dimensions);
+    if (connection->vec_file && connection->vec_file != vec_file)
     {
-        reset_dimensions = true;
-    }
-
-    if (connection)
-    {
-
         fclose(connection->vec_file);
+        connection->vec_file = NULL; // set NULL after closing
     }
 
     // After reading dimensions, seek to end for appending
     fseek(vec_file, 0, SEEK_END);
 
     size_t vec_size_with_id = (dimensions + 1) * sizeof(float);
-    // Now calculate total vector size using dimensions
     size_t total_vec_size = vec_count * vec_size_with_id;
-
-    // Calculate total sizes needed
-    size_t total_meta_size = 0;
-    for (size_t i = 0; i < vec_count; i++)
-    {
-        total_meta_size += metadata_lengths[i];
-    }
-
-    char *err_msg = NULL;
-    int rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
-
-    // Allocate buffers
     unsigned char *vec_buffer = malloc(total_vec_size);
-
     if (!vec_buffer)
     {
         free(header_info);
-        free(vec_buffer);
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
-        sqlite3_close(connection->sqlite_db);
         fclose(vec_file);
         free(temp_vec_file_path);
         return 0;
     }
 
-    // Fill buffers
-    size_t vec_offset = 0;
-    size_t meta_offset = 0;
-    size_t idx_offset = 0;
-
     size_t vec_size = header_info->dimensions * sizeof(float);
+    size_t vec_offset = 0;
+
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION;", 0, 0, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        printf("Transaction begin error: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        free(vec_buffer);
+        free(header_info);
+        fclose(vec_file);
+        free(temp_vec_file_path);
+        return 0;
+    }
 
     sqlite3_stmt *stmt;
     const char *insert_sql = "INSERT INTO metadata (metadata, metadata_length) VALUES (?, ?);";
@@ -876,87 +869,95 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         printf("Failed to prepare statement: %s\n", sqlite3_errmsg(connection->sqlite_db));
         free(vec_buffer);
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
-        sqlite3_close(connection->sqlite_db);
-        // free(sqlite_path);
         free(header_info);
         fclose(vec_file);
         free(temp_vec_file_path);
         return 0;
     }
 
+    int inserted_count = 0; // Track successful insertions
+
     for (size_t i = 0; i < vec_count; i++)
     {
-        if (!vectors[i])
+        if (!vectors[i] || !metadatas[i])
         {
+            printf("Invalid input at index %zu\n", i);
             continue;
         }
 
-        // insert metadata to table
         sqlite3_bind_text(stmt, 1, metadatas[i], metadata_lengths[i], SQLITE_STATIC);
-        sqlite3_bind_int(stmt, 2, metadata_lengths[i]); // Bind the length as an integer
-
+        sqlite3_bind_int(stmt, 2, metadata_lengths[i]);
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE)
         {
             printf("Failed to insert metadata: %s\n", sqlite3_errmsg(connection->sqlite_db));
-            // Continue anyway
+            continue; // Skip this vector but continue with others
         }
 
-        // Get the rowid of the inserted metadata
         sqlite3_int64 metadata_id = sqlite3_last_insert_rowid(connection->sqlite_db);
-
-        // Store metadata ID as a float in the first position
         float md_id_float = (float)metadata_id;
         memcpy(vec_buffer + vec_offset, &md_id_float, sizeof(float));
         vec_offset += sizeof(float);
 
-        // Normalize vector
-        normalize_vector(vectors[i], header_info->dimensions);
-        // Copy vector into buffer
-        memcpy(vec_buffer + vec_offset,
-               vectors[i],
-               vec_size);
+        normalize_vector(vectors[i], dimensions);
+        if (vec_offset + vec_size > total_vec_size)
+        {
+            printf("Buffer overflow: offset=%zu, vec_size=%zu, total=%zu\n", vec_offset, vec_size, total_vec_size);
+            break; // Stop processing but save what we have so far
+        }
+        memcpy(vec_buffer + vec_offset, vectors[i], vec_size);
         vec_offset += vec_size;
+        inserted_count++; // Increment only on successful insertion
 
         sqlite3_reset(stmt);
         sqlite3_clear_bindings(stmt);
     }
 
-    // Finalize statement
     sqlite3_finalize(stmt);
 
-    // Commit transaction
-    rc = sqlite3_exec(connection->sqlite_db, "END TRANSACTION;", 0, 0, &err_msg);
-    if (rc != SQLITE_OK)
+    // Only commit if we inserted something
+    if (inserted_count > 0)
     {
-        printf("Transaction commit error: %s\n", err_msg);
-        sqlite3_free(err_msg);
+        // printf("sqlite3_finalize(stmt);\n");
+        rc = sqlite3_exec(connection->sqlite_db, "END TRANSACTION;", 0, 0, &err_msg);
+        if (rc != SQLITE_OK)
+        {
+            printf("Transaction commit error: %s\n", err_msg);
+            sqlite3_free(err_msg);
+            // Continue anyway to save what we have
+        }
+
+        // Only write to file if we have data to write
+        if (vec_offset > 0)
+        {
+            fwrite(vec_buffer, 1, total_vec_size, vec_file); // Write only what we filled
+
+            fseek(vec_file, 0, SEEK_SET);
+            uint32_t new_count = header_info->vector_count + inserted_count;
+            fwrite(&new_count, sizeof(uint32_t), 1, vec_file);
+            if (reset_dimensions)
+            {
+                fwrite(&dimensions, sizeof(uint32_t), 1, vec_file);
+            }
+        }
+    }
+    else
+    {
+        printf("nothing was inserted\n");
+        // If nothing was inserted, rollback
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
     }
 
-    // Single write for each file
-    fwrite(vec_buffer, 1, total_vec_size, vec_file);
-
-    // Position at start of file
-    fseek(vec_file, 0, SEEK_SET);
-
-    // Calculate new total count
-    int new_count = header_info->vector_count + vec_count;
-
-    // Write the new vector count
-    fwrite(&new_count, sizeof(int), 1, vec_file);
-
-    if (reset_dimensions)
-    {
-        fwrite(&dimensions, sizeof(uint32_t), 1, vec_file);
-    }
-
-    // Cleanup
-    free(header_info);
-    free(vec_buffer);
+    fflush(vec_file);
     fclose(vec_file);
+    vec_file = NULL;
+
+    // Free all allocated resources in reverse order of allocation
+    free(vec_buffer);
+    free(header_info);
     free(temp_vec_file_path);
 
-    return (int)vec_count;
+    return inserted_count;
 }
 
 bool init_sqlite_table(sqlite3 *db)
@@ -1034,34 +1035,30 @@ size_t calculate_optimal_buffer_size(int dimensions)
 
 bool update_db_file_connection(const char *file_path)
 {
-    if (!file_path)
-    {
-        printf("Null file path provided\n");
-        return false;
-    }
-
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
     if (!connection)
     {
-        printf("Failed to get connection for path: %s\n", file_path);
+        printf("Error: No connection found for path: %s\n", file_path);
         return false;
     }
 
-    // Close any existing open files
+    // Close any existing file handle properly
     if (connection->vec_file)
+    {
         fclose(connection->vec_file);
+        connection->vec_file = NULL;
+    }
 
-    connection->vec_file = NULL;
-
-    FILE *vec_file = open_db_file(connection->file_path);
+    FILE *vec_file = fopen(file_path, "r+b");
     if (!vec_file)
     {
-        printf("Failed to open vector file: %s\n", connection->file_path);
+        printf("Error: Could not open file: %s in update_db_file_connection\n", file_path);
+        perror("fopen error"); // Print the detailed error
         return false;
     }
 
+    // Update the connection with the new file handle
     connection->vec_file = vec_file;
-
     return true;
 }
 
@@ -1090,7 +1087,7 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     sprintf(temp_vec_file_path, "%s.temp", file_path);
 
     // Open temporary vector file for writing
-    FILE *temp_vec_file = open_db_file(temp_vec_file_path);
+    FILE *temp_vec_file = fopen(temp_vec_file_path, "r+b");
     if (!temp_vec_file)
     {
         free(temp_vec_file_path);
@@ -1206,7 +1203,10 @@ int delete_data_by_ids(const char *file_path, int *ids_to_delete, int delete_cou
     fseek(temp_vec_file, 0, SEEK_SET);
 
     if (connection->vec_file)
+    {
         fclose(connection->vec_file);
+        connection->vec_file = NULL; // set NULL after closing
+    }
     fclose(temp_vec_file);
 
     // Delete the metadata from the SQLite database in batches

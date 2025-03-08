@@ -5,6 +5,8 @@ from setuptools.command.bdist_egg import bdist_egg
 from setuptools.command.sdist import sdist
 from wheel.bdist_wheel import bdist_wheel
 
+from scripts.copy_core_deps import copy_dependencies
+
 import subprocess
 import platform
 import os
@@ -16,6 +18,7 @@ IS_WINDOWS = platform.system() == "Windows"
 
 class CustomBuildExt(build_ext):
     def run(self):
+        copy_dependencies()
         print("\n" + "="*80)
         print("CUSTOM BUILD EXTENSION RUNNING WITH GCC + AVX SUPPORT")
         print("="*80)
