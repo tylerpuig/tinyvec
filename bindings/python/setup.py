@@ -1,3 +1,7 @@
+import platform
+import subprocess
+import os
+import sys
 from setuptools import setup, find_packages
 from setuptools.command.build_ext import build_ext
 from setuptools.command.install import install
@@ -5,15 +9,16 @@ from setuptools.command.bdist_egg import bdist_egg
 from setuptools.command.sdist import sdist
 from wheel.bdist_wheel import bdist_wheel
 
-from scripts.copy_core_deps import copy_dependencies
-
-import subprocess
-import platform
-import os
-
-
 IS_MACOS = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
+
+
+def copy_dependencies():
+    try:
+        from scripts.copy_core_deps import copy_dependencies
+        copy_dependencies()
+    except ImportError:
+        return
 
 
 class CustomBuildExt(build_ext):
@@ -342,7 +347,7 @@ class CustomBdistWheel(bdist_wheel):
 
 setup(
     name="tinyvecdb",
-    version="0.2.0",
+    version="0.2.2",
     description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,
@@ -357,3 +362,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
 )
+
+
+if __name__ == "__main__" and "build_ext" in sys.argv:
+    copy_dependencies()
