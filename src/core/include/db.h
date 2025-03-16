@@ -60,6 +60,7 @@ extern "C"
     int get_metadata_batch(sqlite3 *db, VecResult *sorted, int count);
     bool get_filtered_ids(sqlite3 *db, const char *where_clause, int **ids_out, int *count_out);
     bool init_sqlite_table(sqlite3 *db);
+    int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count);
 #ifdef __cplusplus
 }
 #endif

@@ -57,4 +57,6 @@ MetadataBytes get_vec_metadata(const int idx_offset, FILE *idx_file, FILE *md_fi
 FILE *open_db_file(const char *file_path);
 bool file_exists(const char *filename);
 bool create_file(const char *filename);
+long find_vector_position(FILE *file, int target_id, VecFileHeaderInfo *header_info);
+bool batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count);
 #endif // FILE_H

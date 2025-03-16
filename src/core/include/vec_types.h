@@ -16,6 +16,13 @@ typedef struct VecResult
     MetadataBytes metadata;
 } VecResult;
 
+typedef struct DBUpsertIem
+{
+    int id;
+    char *metadata;
+    float *vector;
+} DBUpsertIem;
+
 typedef struct DBSearchResult
 {
     VecResult *results;
