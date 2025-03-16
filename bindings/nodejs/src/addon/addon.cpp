@@ -18,6 +18,7 @@ namespace
         float similarity;
         MetadataBytes metadata;
     };
+
     struct AsyncSearchData
     {
         float *query_vec;
@@ -1009,7 +1010,7 @@ namespace
 
         // Add success property
         napi_value success_value;
-        napi_get_boolean(env, true, &success_value);
+        napi_get_boolean(env, success, &success_value);
         napi_set_named_property(env, result_obj, "success", success_value);
 
         // Resolve the promise
@@ -1104,11 +1105,132 @@ namespace
         return promise;
     }
 
+    void ExecuteUpdateVectorsById(napi_env env, void *data)
+    {
+        AsyncUpdateVectorsByIdData *async_data = static_cast<AsyncUpdateVectorsByIdData *>(data);
+
+        int actually_updated = update_items_by_id(
+            async_data->file_path,
+            async_data->update_items,
+            async_data->update_count);
+
+        async_data->actually_updated_count = actually_updated;
+        async_data->success = (actually_updated > 0);
+    }
+
+    void CompleteUpdateVectorsById(napi_env env, napi_status status, void *data)
+    {
+        AsyncUpdateVectorsByIdData *async_data = static_cast<AsyncUpdateVectorsByIdData *>(data);
+
+        // Check if the operation was successful
+        bool success = async_data->success;
+
+        // Create result object
+        napi_value result_obj;
+        napi_create_object(env, &result_obj);
+
+        // Add count property
+        napi_value count_value;
+        napi_create_int32(env, async_data->actually_updated_count, &count_value);
+        napi_set_named_property(env, result_obj, "updatedCount", count_value);
+
+        // Add success property
+        napi_value success_value;
+        napi_get_boolean(env, success, &success_value);
+        napi_set_named_property(env, result_obj, "success", success_value);
+
+        // Resolve the promise
+        napi_resolve_deferred(env, async_data->deferred, result_obj);
+
+        // Clean up
+        napi_delete_async_work(env, async_data->work);
+        cleanup_async_update_data(async_data);
+        delete async_data;
+    }
+
+    napi_value UpdateVectorsById(napi_env env, napi_callback_info info)
+    {
+        napi_status status;
+
+        // Prepare the data for deletion
+        AsyncUpdateVectorsByIdData *async_data = prepare_data_for_update_by_id(env, info);
+        if (!async_data)
+        {
+            return nullptr;
+        }
+
+        // Create promise
+        napi_value promise;
+        status = napi_create_promise(env, &async_data->deferred, &promise);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create promise", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            cleanup_async_update_data(async_data);
+            delete async_data;
+            return nullptr;
+        }
+
+        // Create async work name
+        napi_value resource_name;
+        status = napi_create_string_utf8(env, "UpdateVectorsById", NAPI_AUTO_LENGTH, &resource_name);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create resource name", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            cleanup_async_update_data(async_data);
+            delete async_data;
+            return nullptr;
+        }
+
+        // Create async work
+        status = napi_create_async_work(
+            env,
+            nullptr,
+            resource_name,
+            ExecuteUpdateVectorsById,
+            CompleteUpdateVectorsById,
+            async_data,
+            &async_data->work);
+
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to create async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            cleanup_async_update_data(async_data);
+            delete async_data;
+            return nullptr;
+        }
+
+        // Queue the work
+        status = napi_queue_async_work(env, async_data->work);
+        if (status != napi_ok)
+        {
+            // Handle error
+            napi_value error_msg;
+            napi_create_string_utf8(env, "Failed to queue async work", NAPI_AUTO_LENGTH, &error_msg);
+            napi_throw(env, error_msg);
+            napi_delete_async_work(env, async_data->work);
+            cleanup_async_update_data(async_data);
+            delete async_data;
+            return nullptr;
+        }
+
+        // Return the promise
+        return promise;
+    }
+
     napi_value
     Init(napi_env env, napi_value exports)
     {
         napi_status status;
-        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateDbFileConnectionFn, deleteVectorsByIdFn, deleteVectorsByFilterFn;
+        napi_value searchFn, insertFnAsync, connectFn, getIndexStatsFn, updateDbFileConnectionFn, deleteVectorsByIdFn, deleteVectorsByFilterFn, updateVectorsByIdFn;
 
         // Create search function
         status = napi_create_function(env, nullptr, 0, Search, nullptr, &searchFn);
@@ -1135,6 +1257,9 @@ namespace
         if (status != napi_ok)
             return nullptr;
         status = napi_create_function(env, nullptr, 0, DeleteVectorsByFilter, nullptr, &deleteVectorsByFilterFn);
+        if (status != napi_ok)
+            return nullptr;
+        status = napi_create_function(env, nullptr, 0, UpdateVectorsById, nullptr, &updateVectorsByIdFn);
         if (status != napi_ok)
             return nullptr;
 
@@ -1164,6 +1289,10 @@ namespace
             return nullptr;
 
         status = napi_set_named_property(env, exports, "deleteByFilter", deleteVectorsByFilterFn);
+        if (status != napi_ok)
+            return nullptr;
+
+        status = napi_set_named_property(env, exports, "upsertById", updateVectorsByIdFn);
         if (status != napi_ok)
             return nullptr;
 

@@ -14,6 +14,7 @@ extern "C"
     DBSearchResult *vector_query_with_filter(const char *file_path, const float *query_vec, const int top_k, const char *json_filter);
     int delete_vecs_by_ids(const char *file_path, int *ids_to_delete, int delete_count);
     int delete_vecs_by_filter(const char *file_path, const char *json_filter);
+    int update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count);
 
     int
     insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
