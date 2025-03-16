@@ -35,6 +35,11 @@ export type NativeUpdateDbFileConnectionFunction = (
   filePath: string
 ) => boolean;
 
+export type NativeUpdateVectorsByIdFunction = (
+  filePath: string,
+  items: TinyVecUpsert[]
+) => Promise<DeletionResult>;
+
 export type TinyVecSearchResult<TMeta = any> = {
   id: number;
   similarity: number;
@@ -87,6 +92,12 @@ interface JsonObject {
 interface JsonArray extends Array<JsonValue> {}
 
 export type TinyVecInsertion = {
+  vector: NumericArray;
+  metadata: JsonValue;
+};
+
+export type TinyVecUpsert = {
+  id: number;
   vector: NumericArray;
   metadata: JsonValue;
 };

@@ -20,6 +20,8 @@ const nativeDeleteVectorsByIds =
   nativeModule.deleteByIds as tinyvecTypes.DeleteVectorsByIdsFunction;
 const nativeDeleteVectorsByFilter =
   nativeModule.deleteByFilter as tinyvecTypes.DeleteVectorsByFilterFunction;
+const nativeUpsertVectorsById =
+  nativeModule.upsertById as tinyvecTypes.NativeUpdateVectorsByIdFunction;
 
 class TinyVecClient {
   private filePath: string;
