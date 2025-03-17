@@ -3,6 +3,7 @@
 #include "addon_utils.h"
 #include "../../../src/core/include/vec_types.h"
 #include <iostream>
+#include <cstring>
 
 napi_value convert_json_to_napi(napi_env env, cJSON *json)
 {
