@@ -228,6 +228,46 @@ result = await client.delete_by_filter(search_options)
 print(f"Deleted {result.deleted_count} vectors. Success: {result.success}")
 ```
 
+##### `async update_by_id(items)`
+
+Updates existing database entries with new metadata and/or vector values.
+
+**Parameters:**
+
+- `items`: `List[UpdateItem]` - List of items to update, each containing ID and optional metadata/vector data
+
+**Returns:**
+
+- `UpdateResult` - Object containing update count and success status
+
+**Example:**
+
+```python
+import numpy as np
+import tinyvec
+
+# Create update items
+update_items = [
+    tinyvec.UpdateItem(
+        id=1,
+        vector=np.random.rand(128).astype(np.float32),
+        metadata={"category": "electronics", "in_stock": True}
+    ),
+    tinyvec.UpdateItem(
+        id=42,
+        metadata={"price": 99.99, "featured": True}
+    ),
+    tinyvec.UpdateItem(
+        id=75,
+        vector=np.random.rand(128).astype(np.float32)
+    )
+]
+
+# Update entries in the database
+result = await client.update_by_id(update_items)
+print(f"Updated {result.updated_count} entries. Success: {result.success}")
+```
+
 ##### `async get_index_stats()`
 
 Retrieves statistics about the database.

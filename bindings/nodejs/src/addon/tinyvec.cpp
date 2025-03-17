@@ -53,3 +53,8 @@ extern "C" bool update_instance_db_file_connection(const char *file_path)
 {
     return update_db_file_connection(file_path);
 }
+
+extern "C" int update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count)
+{
+    return batch_update_items_by_id(file_path, items, item_count);
+}

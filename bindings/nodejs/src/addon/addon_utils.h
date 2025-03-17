@@ -39,11 +39,24 @@ struct AsyncDeleteVectorsByFilterData
     napi_async_work work;
 };
 
+struct AsyncUpdateVectorsByIdData
+{
+    char *file_path;
+    DBUpdateItem *update_items;
+    int update_count;
+    int actually_updated_count;
+    bool success;
+    napi_deferred deferred;
+    napi_async_work work;
+};
+
 napi_value convert_json_to_napi(napi_env env, cJSON *json);
 AsyncInsertData *prepare_data_for_insertion(napi_env env, napi_callback_info info);
 ConnectionData *prepare_data_for_connection(napi_env env, napi_callback_info info);
 char *prepare_data_for_index_stats(napi_env env, napi_callback_info info);
 AsyncDeleteVectorsByIdData *prepare_data_for_deletion_by_id(napi_env env, napi_callback_info info);
 AsyncDeleteVectorsByFilterData *prepare_data_for_deletion_by_filter(napi_env env, napi_callback_info info);
+AsyncUpdateVectorsByIdData *prepare_data_for_update_by_id(napi_env env, napi_callback_info info);
+void cleanup_async_update_data(AsyncUpdateVectorsByIdData *async_data);
 
 #endif // ADDONUTILS_H

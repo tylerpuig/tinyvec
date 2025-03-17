@@ -1,25 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import json
 import ctypes
 import os
 import struct
 import ctypes
 import shutil
-from typing import List, cast
-from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header
+from typing import List
+from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header, prepare_db_update_items
 from .types import VectorInput
 
 
-from .core.ctypes_bindings import lib, VecResult, MetadataBytes
+from .core.ctypes_bindings import lib
 from .models import (
     ClientConfig,
     SearchResult,
     Insertion,
     IndexStats,
     SearchOptions,
-    DeletionResult
+    DeletionResult,
+    UpdateResult,
+    UpdateItem
 )
 
 
@@ -118,7 +120,7 @@ class TinyVecClient:
             run_query
         )
 
-    async def insert(self, vectors: List[Insertion]):
+    async def insert(self, vectors: List[Insertion]) -> int:
         def insert_data():
             if len(vectors) == 0:
                 return 0
@@ -264,10 +266,9 @@ class TinyVecClient:
                 index_stats.dimensions
             )
 
-            # Execute the native deletion function in the executor
             deleted_count = await asyncio.get_event_loop().run_in_executor(
                 self.executor,
-                run_delete_ids_native  # Use the native function that returns an int
+                run_delete_ids_native
             )
 
             # Rename temp file to original
@@ -352,6 +353,39 @@ class TinyVecClient:
             except:
                 # Ignore errors during cleanup
                 pass
+
+    async def update_by_id(self, items: List[UpdateItem]) -> UpdateResult:
+        if not items:
+            return UpdateResult(updated_count=0, success=False)
+
+        index_stats = await self.get_index_stats()
+        if not index_stats or index_stats.vector_count == 0:
+
+            return UpdateResult(updated_count=0, success=False)
+
+        def update_items_by_id():
+            try:
+                c_items, vector_refs, metadata_refs = prepare_db_update_items(
+                    items)
+
+                updated_count = lib.batch_update_items_by_id(
+                    self.encoded_path, c_items, len(items))
+
+                if updated_count <= 0:
+                    return UpdateResult(updated_count=0, success=False)
+
+                # Update DB file connection
+                lib.update_db_file_connection(self.encoded_path)
+
+                return UpdateResult(updated_count=updated_count, success=True)
+
+            except Exception as e:
+                raise e
+
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            update_items_by_id
+        )
 
     async def get_index_stats(self) -> IndexStats:
         def run_stats():

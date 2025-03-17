@@ -4,8 +4,6 @@ import os
 import sys
 from setuptools import setup, find_packages
 from setuptools.command.build_ext import build_ext
-from setuptools.command.install import install
-from setuptools.command.bdist_egg import bdist_egg
 from setuptools.command.sdist import sdist
 from wheel.bdist_wheel import bdist_wheel
 
@@ -329,25 +327,9 @@ class CustomBdistWheel(bdist_wheel):
         return python, abi, plat
 
 
-# def get_package_data_files():
-#     data_files = []
-
-#     # Add shared library files based on platform
-#     if IS_WINDOWS:
-#         data_files.append(
-#             ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dll']))
-#     elif IS_MACOS:
-#         data_files.append(
-#             ('tinyvec/core', ['src/tinyvec/core/tinyveclib.dylib']))
-#     else:
-#         data_files.append(('tinyvec/core', ['src/tinyvec/core/tinyveclib.so']))
-
-#     return data_files
-
-
 setup(
     name="tinyvecdb",
-    version="0.2.2",
+    version="0.2.3",
     description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,

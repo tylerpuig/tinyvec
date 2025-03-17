@@ -3,6 +3,7 @@
 #include "addon_utils.h"
 #include "../../../src/core/include/vec_types.h"
 #include <iostream>
+#include <cstring>
 
 napi_value convert_json_to_napi(napi_env env, cJSON *json)
 {
@@ -517,4 +518,174 @@ AsyncDeleteVectorsByFilterData *prepare_data_for_deletion_by_filter(napi_env env
     }
 
     return asyncData;
+}
+
+AsyncUpdateVectorsByIdData *prepare_data_for_update_by_id(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+    AsyncUpdateVectorsByIdData *async_data = new AsyncUpdateVectorsByIdData;
+    async_data->file_path = nullptr;
+    async_data->update_count = 0;
+    async_data->update_items = nullptr;
+
+    // Get arguments
+    size_t argc = 2;
+    napi_value args[2];
+    status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (status != napi_ok)
+    {
+        delete async_data;
+        return nullptr;
+    }
+
+    // Check argument count
+    if (argc < 2)
+    {
+        napi_throw_error(env, nullptr, "Wrong number of arguments. Expected file path and array of items to update.");
+        delete async_data;
+        return nullptr;
+    }
+
+    // Get file path
+    size_t file_path_str_size;
+    status = napi_get_value_string_utf8(env, args[0], nullptr, 0, &file_path_str_size);
+    if (status != napi_ok)
+    {
+        napi_throw_error(env, nullptr, "First argument must be a string (file path).");
+        delete async_data;
+        return nullptr;
+    }
+
+    async_data->file_path = new char[file_path_str_size + 1];
+    status = napi_get_value_string_utf8(env, args[0], async_data->file_path, file_path_str_size + 1, nullptr);
+    if (status != napi_ok)
+    {
+        delete[] async_data->file_path;
+        delete async_data;
+        napi_throw_error(env, nullptr, "Failed to read file path.");
+        return nullptr;
+    }
+
+    // Extract items array
+    uint32_t items_length;
+    napi_get_array_length(env, args[1], &items_length);
+
+    // Allocate memory for update items
+    DBUpdateItem *update_items = new DBUpdateItem[items_length];
+
+    // Process each item
+    for (uint32_t i = 0; i < items_length; i++)
+    {
+        napi_value item;
+        napi_get_element(env, args[1], i, &item);
+
+        // Get id
+        napi_value id_value;
+        napi_get_named_property(env, item, "id", &id_value);
+        napi_get_value_int32(env, id_value, &update_items[i].id);
+
+        napi_value metadata_value;
+        bool has_metadata = false;
+        napi_get_named_property(env, item, "metadata", &metadata_value);
+        napi_valuetype value_type;
+        napi_typeof(env, metadata_value, &value_type);
+        has_metadata = (value_type != napi_undefined && value_type != napi_null);
+
+        if (has_metadata)
+        {
+            // Only process metadata if it exists
+            size_t metadata_len;
+            napi_get_value_string_utf8(env, metadata_value, nullptr, 0, &metadata_len);
+            update_items[i].metadata = new char[metadata_len + 1];
+            napi_get_value_string_utf8(env, metadata_value, update_items[i].metadata, metadata_len + 1, nullptr);
+        }
+        else
+        {
+            update_items[i].metadata = nullptr; // Set it to null if not provided
+        }
+
+        update_items[i].vector = nullptr;
+        update_items[i].vector_length = 0;
+
+        // Get vector (Float32Array)
+        napi_value vector_value;
+        bool has_vector = false;
+        napi_get_named_property(env, item, "vector", &vector_value);
+        napi_valuetype vector_type;
+        napi_typeof(env, vector_value, &vector_type);
+        has_vector = (vector_type != napi_undefined && vector_type != napi_null);
+
+        if (has_vector)
+        {
+            // Get vector length and data
+            bool is_typedarray;
+            napi_is_typedarray(env, vector_value, &is_typedarray);
+            if (is_typedarray)
+            {
+                napi_typedarray_type type;
+                size_t vector_length;
+                void *data;
+                napi_value arraybuffer;
+                size_t byte_offset;
+                napi_get_typedarray_info(env, vector_value, &type, &vector_length, &data, &arraybuffer, &byte_offset);
+
+                if (type == napi_float32_array)
+                {
+                    // Allocate and copy vector data
+                    update_items[i].vector = new float[vector_length];
+                    update_items[i].vector_length = vector_length;
+                    memcpy(update_items[i].vector, static_cast<float *>(data), vector_length * sizeof(float));
+                }
+            }
+        }
+        else
+        {
+            update_items[i].vector = nullptr;
+            update_items[i].vector_length = 0;
+        }
+    }
+
+    async_data->update_items = update_items;
+    async_data->update_count = items_length;
+
+    return async_data;
+}
+
+void cleanup_async_update_data(AsyncUpdateVectorsByIdData *async_data)
+{
+    if (!async_data)
+        return;
+
+    // Free file path
+    if (async_data->file_path)
+    {
+        delete[] async_data->file_path;
+        async_data->file_path = nullptr;
+    }
+
+    // Free update items
+    if (async_data->update_items)
+    {
+        for (int i = 0; i < async_data->update_count; i++)
+        {
+            if (async_data->update_items[i].metadata)
+            {
+                delete[] async_data->update_items[i].metadata;
+            }
+            if (async_data->update_items[i].vector)
+            {
+                delete[] async_data->update_items[i].vector;
+            }
+        }
+        delete[] async_data->update_items;
+        async_data->update_items = nullptr;
+    }
+
+    async_data->update_count = 0;
+    async_data->actually_updated_count = 0;
+    async_data->success = false;
+
+    // Note: we don't delete the async_data itself here
+    // or handle the napi_async_work/deferred
+    // as that depends on the context of the cleanup
 }

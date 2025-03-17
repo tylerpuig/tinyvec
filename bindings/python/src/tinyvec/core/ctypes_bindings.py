@@ -76,6 +76,15 @@ class DBSearchResult(ctypes.Structure):
     ]
 
 
+class DBUpdateItem(ctypes.Structure):
+    _fields_ = [
+        ("id", ctypes.c_int),
+        ("metadata", ctypes.c_char_p),
+        ("vector", ctypes.POINTER(ctypes.c_float)),
+        ("vector_length", ctypes.c_int)
+    ]
+
+
 # Load the library
 lib = ctypes.CDLL(str(get_lib_path()))
 
@@ -126,3 +135,10 @@ lib.delete_data_by_filter.argtypes = [
     ctypes.c_char_p
 ]
 lib.delete_data_by_filter.restype = ctypes.c_int
+
+lib.batch_update_items_by_id.argtypes = [
+    ctypes.c_char_p,
+    ctypes.POINTER(DBUpdateItem),
+    ctypes.c_int
+]
+lib.batch_update_items_by_id.restype = ctypes.c_int

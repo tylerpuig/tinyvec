@@ -204,6 +204,7 @@ if __name__ == "__main__":
 - **deleteByIds**: Remove vectors by their IDs
 - **deleteByFilter**: Remove vectors that match specific filter criteria
 - **getIndexStats**: Returns database statistics (vector count and dimensions)
+- **updateById**: Update existing vectors with new metadata and/or vector data
 
 ## MongoDB-like Filtering
 
