@@ -1,4 +1,4 @@
-from typing import Union, Optional, List, Dict, Any, TypeVar, Generic
+from typing import Optional
 from dataclasses import dataclass
 from .types import VectorInput, JsonValue
 

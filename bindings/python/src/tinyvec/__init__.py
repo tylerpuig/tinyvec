@@ -1,8 +1,8 @@
 """
-Tinyvec - A tiny vector database for Python
+TinyVec - A tiny vector database for Python
 """
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 from .client import TinyVecClient
 from .models import ClientConfig, SearchResult, Insertion, IndexStats, SearchOptions, UpdateItem

@@ -1,18 +1,18 @@
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import json
 import ctypes
 import os
 import struct
 import ctypes
 import shutil
-from typing import List, cast
+from typing import List
 from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header, prepare_db_update_items
 from .types import VectorInput
 
 
-from .core.ctypes_bindings import lib, VecResult, MetadataBytes
+from .core.ctypes_bindings import lib
 from .models import (
     ClientConfig,
     SearchResult,
@@ -266,10 +266,9 @@ class TinyVecClient:
                 index_stats.dimensions
             )
 
-            # Execute the native deletion function in the executor
             deleted_count = await asyncio.get_event_loop().run_in_executor(
                 self.executor,
-                run_delete_ids_native  # Use the native function that returns an int
+                run_delete_ids_native
             )
 
             # Rename temp file to original
