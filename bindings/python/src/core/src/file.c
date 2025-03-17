@@ -442,3 +442,43 @@ FILE *open_db_file(const char *file_path)
 
     return db_file;
 }
+
+long find_vector_position(FILE *file, int target_id, VecFileHeaderInfo *header_info)
+{
+    // Calculate header size - two uint32_t values
+    long header_size = 2 * sizeof(uint32_t); // total_vectors (uint32_t) + dimensions (uint32_t)
+
+    // Calculate record size
+    long record_size = sizeof(float) * (header_info->dimensions + 1); // ID + vector data
+
+    long low = 0;
+    long high = header_info->vector_count - 1;
+
+    while (low <= high)
+    {
+        long mid = low + (high - low) / 2;
+
+        long pos = header_size + (mid * record_size);
+
+        // Read the ID at this position
+        float id_float;
+        fseek(file, pos, SEEK_SET);
+        fread(&id_float, sizeof(float), 1, file);
+        int id = (int)id_float;
+
+        if (id == target_id)
+        {
+            return pos;
+        }
+        else if (id < target_id)
+        {
+            low = mid + 1;
+        }
+        else
+        {
+            high = mid - 1;
+        }
+    }
+
+    return -1; // Not found
+}

@@ -1290,3 +1290,131 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
     free(filtered_ids);
     return delete_count;
 }
+
+int batch_update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count)
+{
+    TinyVecConnection *connection = get_tinyvec_connection(file_path);
+    if (!connection || !connection->sqlite_db || !connection->vec_file)
+    {
+        return 0;
+    }
+
+    // Track successful updates by type
+    int metadata_update_count = 0;
+    int vector_update_count = 0;
+
+    // Begin transaction for better performance
+    sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+
+    // Prepare statements once
+    sqlite3_stmt *metadata_stmt = NULL;
+    if (sqlite3_prepare_v2(connection->sqlite_db, "UPDATE metadata SET metadata = ?, metadata_length = ? WHERE id = ?",
+                           -1, &metadata_stmt, NULL) != SQLITE_OK)
+    {
+        fprintf(stderr, "Failed to prepare metadata statement: %s\n", sqlite3_errmsg(connection->sqlite_db));
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK", NULL, NULL, NULL);
+        return 0;
+    }
+
+    VecFileHeaderInfo *header_info = get_vec_file_header_info(connection->vec_file, 0);
+    if (!header_info)
+    {
+        fprintf(stderr, "Failed to get vector file header info\n");
+        sqlite3_finalize(metadata_stmt);
+        return 0;
+    }
+
+    bool transaction_valid = true;
+
+    for (int i = 0; i < item_count; i++)
+    {
+        DBUpdateItem *item = &items[i];
+
+        // Update metadata if provided
+        if (item->metadata)
+        {
+            int metadata_length = strlen(item->metadata);
+
+            sqlite3_reset(metadata_stmt);
+            sqlite3_bind_text(metadata_stmt, 1, item->metadata, metadata_length, SQLITE_STATIC);
+            sqlite3_bind_int(metadata_stmt, 2, metadata_length);
+            sqlite3_bind_int(metadata_stmt, 3, item->id);
+
+            if (sqlite3_step(metadata_stmt) != SQLITE_DONE)
+            {
+                fprintf(stderr, "Metadata update failed for ID %d: %s\n",
+                        item->id, sqlite3_errmsg(connection->sqlite_db));
+                transaction_valid = false;
+                break;
+            }
+
+            // Only increment if changes were actually made
+            if (sqlite3_changes(connection->sqlite_db) > 0)
+            {
+                metadata_update_count++;
+            }
+        }
+
+        // Update vector if provided
+        if (item->vector)
+        {
+            if (item->vector_length != header_info->dimensions)
+            {
+                fprintf(stderr, "Skipping vector update for ID %d: dimension mismatch (got %d, expected %d)\n",
+                        item->id, item->vector_length, header_info->dimensions);
+                continue;
+            }
+
+            long position = find_vector_position(connection->vec_file, item->id, header_info);
+            if (position < 0)
+            {
+                fprintf(stderr, "Vector ID %d not found\n", item->id);
+                transaction_valid = false;
+                break;
+            }
+
+            // Skip ID, seek to vector position
+            position += sizeof(float);
+            fseek(connection->vec_file, position, SEEK_SET);
+
+            // Normalize vector
+            normalize_vector(item->vector, header_info->dimensions);
+
+            // Write vector data
+            if (fwrite(item->vector, sizeof(float), header_info->dimensions, connection->vec_file) != header_info->dimensions)
+            {
+                fprintf(stderr, "Vector write error for ID %d\n", item->id);
+                transaction_valid = false;
+                break;
+            }
+
+            vector_update_count++;
+        }
+    }
+
+    // Finalize statement
+    sqlite3_finalize(metadata_stmt);
+
+    int update_count = 0;
+
+    // Commit or rollback based on success
+    if (transaction_valid)
+    {
+        sqlite3_exec(connection->sqlite_db, "COMMIT", NULL, NULL, NULL);
+        if (connection->vec_file)
+            fflush(connection->vec_file);
+
+        // Return the larger of the two counts
+        update_count = (metadata_update_count > vector_update_count) ? metadata_update_count : vector_update_count;
+    }
+    else
+    {
+        sqlite3_exec(connection->sqlite_db, "ROLLBACK", NULL, NULL, NULL);
+        // Reset count on failure as we rolled back
+        update_count = 0;
+    }
+
+    free(header_info);
+
+    return update_count;
+}
