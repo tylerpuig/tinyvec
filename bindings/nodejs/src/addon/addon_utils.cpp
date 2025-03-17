@@ -583,37 +583,64 @@ AsyncUpdateVectorsByIdData *prepare_data_for_update_by_id(napi_env env, napi_cal
         napi_get_named_property(env, item, "id", &id_value);
         napi_get_value_int32(env, id_value, &update_items[i].id);
 
-        // Get metadata (string)
         napi_value metadata_value;
+        bool has_metadata = false;
         napi_get_named_property(env, item, "metadata", &metadata_value);
-        size_t metadata_len;
-        napi_get_value_string_utf8(env, metadata_value, nullptr, 0, &metadata_len);
-        update_items[i].metadata = new char[metadata_len + 1];
-        napi_get_value_string_utf8(env, metadata_value, update_items[i].metadata, metadata_len + 1, nullptr);
+        napi_valuetype value_type;
+        napi_typeof(env, metadata_value, &value_type);
+        has_metadata = (value_type != napi_undefined && value_type != napi_null);
+
+        if (has_metadata)
+        {
+            // Only process metadata if it exists
+            size_t metadata_len;
+            napi_get_value_string_utf8(env, metadata_value, nullptr, 0, &metadata_len);
+            update_items[i].metadata = new char[metadata_len + 1];
+            napi_get_value_string_utf8(env, metadata_value, update_items[i].metadata, metadata_len + 1, nullptr);
+        }
+        else
+        {
+            update_items[i].metadata = nullptr; // Set it to null if not provided
+        }
+
+        update_items[i].vector = nullptr;
+        update_items[i].vector_length = 0;
 
         // Get vector (Float32Array)
         napi_value vector_value;
+        bool has_vector = false;
         napi_get_named_property(env, item, "vector", &vector_value);
+        napi_valuetype vector_type;
+        napi_typeof(env, vector_value, &vector_type);
+        has_vector = (vector_type != napi_undefined && vector_type != napi_null);
 
-        // Get vector length and data
-        bool is_typedarray;
-        napi_is_typedarray(env, vector_value, &is_typedarray);
-        if (is_typedarray)
+        if (has_vector)
         {
-            napi_typedarray_type type;
-            size_t vector_length;
-            void *data;
-            napi_value arraybuffer;
-            size_t byte_offset;
-            napi_get_typedarray_info(env, vector_value, &type, &vector_length, &data, &arraybuffer, &byte_offset);
-
-            if (type == napi_float32_array)
+            // Get vector length and data
+            bool is_typedarray;
+            napi_is_typedarray(env, vector_value, &is_typedarray);
+            if (is_typedarray)
             {
-                // Allocate and copy vector data
-                update_items[i].vector = new float[vector_length];
-                update_items[i].vector_length = vector_length;
-                memcpy(update_items[i].vector, static_cast<float *>(data), vector_length * sizeof(float));
+                napi_typedarray_type type;
+                size_t vector_length;
+                void *data;
+                napi_value arraybuffer;
+                size_t byte_offset;
+                napi_get_typedarray_info(env, vector_value, &type, &vector_length, &data, &arraybuffer, &byte_offset);
+
+                if (type == napi_float32_array)
+                {
+                    // Allocate and copy vector data
+                    update_items[i].vector = new float[vector_length];
+                    update_items[i].vector_length = vector_length;
+                    memcpy(update_items[i].vector, static_cast<float *>(data), vector_length * sizeof(float));
+                }
             }
+        }
+        else
+        {
+            update_items[i].vector = nullptr;
+            update_items[i].vector_length = 0;
         }
     }
 

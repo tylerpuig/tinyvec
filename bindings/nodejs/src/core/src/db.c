@@ -1294,13 +1294,14 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
 int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count)
 {
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
-    if (!connection || !connection->sqlite_db)
+    if (!connection || !connection->sqlite_db || !connection->vec_file)
     {
         return 0;
     }
 
-    // Track successful updates
-    int update_count = 0;
+    // Track successful updates by type
+    int metadata_update_count = 0;
+    int vector_update_count = 0;
 
     // Begin transaction for better performance
     sqlite3_exec(connection->sqlite_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
@@ -1328,7 +1329,6 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
     for (int i = 0; i < item_count; i++)
     {
         DBUpsertIem *item = &items[i];
-        bool item_updated = false;
 
         // Update metadata if provided
         if (item->metadata)
@@ -1348,16 +1348,23 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
                 break;
             }
 
-            // Check if any rows were affected
+            // Only increment if changes were actually made
             if (sqlite3_changes(connection->sqlite_db) > 0)
             {
-                item_updated = true;
+                metadata_update_count++;
             }
         }
 
         // Update vector if provided
-        if (item->vector && connection->vec_file)
+        if (item->vector)
         {
+            if (item->vector_length != header_info->dimensions)
+            {
+                fprintf(stderr, "Skipping vector update for ID %d: dimension mismatch (got %d, expected %d)\n",
+                        item->id, item->vector_length, header_info->dimensions);
+                continue;
+            }
+
             long position = find_vector_position(connection->vec_file, item->id, header_info);
             if (position < 0)
             {
@@ -1370,6 +1377,9 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
             position += sizeof(float);
             fseek(connection->vec_file, position, SEEK_SET);
 
+            // Normalize vector
+            normalize_vector(item->vector, header_info->dimensions);
+
             // Write vector data
             if (fwrite(item->vector, sizeof(float), header_info->dimensions, connection->vec_file) != header_info->dimensions)
             {
@@ -1378,18 +1388,14 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
                 break;
             }
 
-            item_updated = true;
-        }
-
-        // If either metadata or vector was updated successfully
-        if (item_updated)
-        {
-            update_count++;
+            vector_update_count++;
         }
     }
 
     // Finalize statement
     sqlite3_finalize(metadata_stmt);
+
+    int update_count = 0;
 
     // Commit or rollback based on success
     if (transaction_valid)
@@ -1397,11 +1403,15 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
         sqlite3_exec(connection->sqlite_db, "COMMIT", NULL, NULL, NULL);
         if (connection->vec_file)
             fflush(connection->vec_file);
+
+        // Return the larger of the two counts
+        update_count = (metadata_update_count > vector_update_count) ? metadata_update_count : vector_update_count;
     }
     else
     {
         sqlite3_exec(connection->sqlite_db, "ROLLBACK", NULL, NULL, NULL);
-        update_count = 0; // Reset count on failure as we rolled back
+        // Reset count on failure as we rolled back
+        update_count = 0;
     }
 
     free(header_info);
