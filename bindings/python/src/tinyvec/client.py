@@ -8,7 +8,7 @@ import struct
 import ctypes
 import shutil
 from typing import List, cast
-from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header
+from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header, prepare_db_update_items
 from .types import VectorInput
 
 
@@ -19,7 +19,9 @@ from .models import (
     Insertion,
     IndexStats,
     SearchOptions,
-    DeletionResult
+    DeletionResult,
+    UpdateResult,
+    UpdateItem
 )
 
 
@@ -352,6 +354,32 @@ class TinyVecClient:
             except:
                 # Ignore errors during cleanup
                 pass
+
+    async def update_by_id(self, items: List[UpdateItem]) -> UpdateResult:
+        if not items:
+            return UpdateResult(updated_count=0, success=False)
+
+        try:
+            index_stats = await self.get_index_stats()
+            if not index_stats or index_stats.vector_count == 0:
+                return UpdateResult(updated_count=0, success=False)
+
+            c_items, vector_refs, metadata_refs = prepare_db_update_items(
+                items)
+
+            updated_count = lib.batch_update_items_by_id(
+                self.encoded_path, c_items, len(items))
+
+            if updated_count <= 0:
+                return UpdateResult(updated_count=0, success=False)
+
+            # Update DB file connection
+            lib.update_db_file_connection(self.encoded_path)
+
+            return UpdateResult(updated_count=updated_count, success=True)
+
+        except Exception as e:
+            raise e
 
     async def get_index_stats(self) -> IndexStats:
         def run_stats():

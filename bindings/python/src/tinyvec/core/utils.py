@@ -2,7 +2,12 @@ import os
 import struct
 import numpy as np
 import numpy.typing as npt
+import ctypes
+import json
+from typing import List, Tuple
+from ..models import UpdateItem
 from ..types import VectorInput
+from .ctypes_bindings import DBUpdateItem
 
 
 def ensure_absolute_path(file_path: str) -> str:
@@ -98,3 +103,43 @@ def write_file_header(file_path: str, vectors: int, dims: int) -> None:
             os.fsync(f.fileno())  # Ensure data is written to disk
     except Exception as e:
         raise RuntimeError(f"Failed to write file header: {e}") from e
+
+
+def prepare_db_update_items(items: List[UpdateItem]) -> Tuple[ctypes.Array, list, list]:
+    c_items = (DBUpdateItem * len(items))()
+
+    # Keep references to allocated memory to prevent garbage collection
+    vector_references = []
+    metadata_references = []
+
+    for i, item in enumerate(items):
+        # Convert id
+        c_items[i].id = item.id
+
+        # Convert metadata to JSON string, then to bytes
+        metadata_str = json.dumps(getattr(item, "metadata", None))
+        metadata_bytes = metadata_str.encode('utf-8')
+        c_items[i].metadata = metadata_bytes
+        metadata_references.append(metadata_bytes)  # Keep reference
+
+        # Convert vector to float32 array
+        vector = getattr(item, "vector", None)
+        if vector is None:
+            vector = np.array([], dtype=np.float32)
+        vector_float32 = get_float32_array(vector)
+        vector_length = len(vector_float32)
+
+        # Allocate memory for the vector and copy data
+        if vector_length > 0:
+            c_array = (ctypes.c_float * vector_length)(*vector_float32)
+            c_items[i].vector = ctypes.cast(
+                c_array, ctypes.POINTER(ctypes.c_float))
+            c_items[i].vector_length = vector_length
+            vector_references.append(c_array)  # Keep reference
+        else:
+            c_items[i].vector = ctypes.POINTER(
+                ctypes.c_float)()  # NULL pointer
+            c_items[i].vector_length = 0
+
+    # Return the prepared items and references to keep them alive
+    return c_items, vector_references, metadata_references

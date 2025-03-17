@@ -1,5 +1,6 @@
+from typing import Union, Optional, List, Dict, Any, TypeVar, Generic
 from dataclasses import dataclass
-from .types import VectorInput
+from .types import VectorInput, JsonValue
 
 
 @dataclass
@@ -12,13 +13,13 @@ class IndexStats:
 class SearchResult:
     similarity: float
     id: int
-    metadata: dict | None
+    metadata: JsonValue
 
 
 @dataclass
 class Insertion:
     vector: VectorInput
-    metadata: dict | None
+    metadata: JsonValue
 
 
 @dataclass
@@ -34,4 +35,21 @@ class SearchOptions:
 @dataclass
 class DeletionResult:
     deleted_count: int
+    success: bool
+
+
+@dataclass
+class UpdateItem:
+    id: int
+    metadata: Optional[JsonValue] = None
+    vector: Optional[VectorInput] = None
+
+    def __post_init__(self):
+        if self.metadata is None and self.vector is None:
+            raise ValueError("Either metadata or vector must be provided")
+
+
+@dataclass
+class UpdateResult:
+    updated_count: int
     success: bool
