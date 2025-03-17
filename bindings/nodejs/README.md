@@ -257,6 +257,55 @@ console.log(
 );
 ```
 
+##### `async updateById(items)`
+
+Updates existing database entries with new metadata and/or vector values.
+
+**Parameters:**
+
+- `items`: `Array<UpdateItem>` - Array of items to update, each containing ID and optional metadata/vector data
+
+**Returns:**
+
+- `UpdateResult` - Object containing update count and success status
+
+**Example:**
+
+```typescript
+import { TinyVecClient, type UpdateItem } from "tinyvecdb";
+
+// Create update items
+const updateItems: UpdateItem[] = [
+  {
+    id: 1,
+    vector: new Float32Array(
+      Array(128)
+        .fill()
+        .map(() => Math.random())
+    ),
+    metadata: { category: "electronics", inStock: true },
+  },
+  {
+    id: 42,
+    metadata: { price: 99.99, featured: true },
+  },
+  {
+    id: 75,
+    vector: new Float32Array(
+      Array(128)
+        .fill()
+        .map(() => Math.random())
+    ),
+  },
+];
+
+// Update entries in the database
+const result = await client.updateById(updateItems);
+console.log(
+  `Updated ${result.updatedCount} entries. Success: ${result.success}`
+);
+```
+
 ##### `async getIndexStats()`
 
 Retrieves statistics about the database.
