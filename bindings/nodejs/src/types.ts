@@ -101,8 +101,18 @@ export type TinyVecInsertion = {
   metadata: JsonValue;
 };
 
-export type UpdateItem = {
+type OnlyMetadataUpdateItem = {
   id: number;
+  metadata: JsonValue;
   vector?: NumericArray;
+};
+
+type OnlyVectorUpdateItem = {
+  id: number;
+  vector: NumericArray;
   metadata?: JsonValue;
 };
+
+export type UpdateItem = {
+  id: number;
+} & (OnlyMetadataUpdateItem | OnlyVectorUpdateItem);

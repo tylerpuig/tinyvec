@@ -52,7 +52,7 @@ extern "C"
     EXPORT int insert_data(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
                            const size_t vec_count, const uint32_t dimensions);
     EXPORT bool update_db_file_connection(const char *file_path);
-    EXPORT int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count);
+    EXPORT int batch_update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count);
 
     // Internal functions
     TinyVecConnection *get_tinyvec_connection(const char *file_path);

@@ -570,7 +570,7 @@ AsyncUpdateVectorsByIdData *prepare_data_for_update_by_id(napi_env env, napi_cal
     napi_get_array_length(env, args[1], &items_length);
 
     // Allocate memory for update items
-    DBUpsertIem *update_items = new DBUpsertIem[items_length];
+    DBUpdateItem *update_items = new DBUpdateItem[items_length];
 
     // Process each item
     for (uint32_t i = 0; i < items_length; i++)

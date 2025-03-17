@@ -1291,7 +1291,7 @@ int delete_data_by_filter(const char *file_path, const char *json_filter)
     return delete_count;
 }
 
-int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item_count)
+int batch_update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count)
 {
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
     if (!connection || !connection->sqlite_db || !connection->vec_file)
@@ -1328,7 +1328,7 @@ int batch_update_items_by_id(const char *file_path, DBUpsertIem *items, int item
 
     for (int i = 0; i < item_count; i++)
     {
-        DBUpsertIem *item = &items[i];
+        DBUpdateItem *item = &items[i];
 
         // Update metadata if provided
         if (item->metadata)

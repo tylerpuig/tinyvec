@@ -42,7 +42,7 @@ struct AsyncDeleteVectorsByFilterData
 struct AsyncUpdateVectorsByIdData
 {
     char *file_path;
-    DBUpsertIem *update_items;
+    DBUpdateItem *update_items;
     int update_count;
     int actually_updated_count;
     bool success;
