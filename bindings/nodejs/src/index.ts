@@ -240,6 +240,42 @@ class TinyVecClient {
     }
   }
 
+  async updateById(
+    items: tinyvecTypes.UpdateItem[]
+  ): Promise<tinyvecTypes.UpdateResult> {
+    if (!items || !items.length) {
+      return { updatedCount: 0, success: false };
+    }
+    try {
+      const indexStats = await nativeGetIndexStats(this.filePath);
+      if (!indexStats || !indexStats.vectors) {
+        return { updatedCount: 0, success: false };
+      }
+
+      const formattedItems = items.map((item) => {
+        return {
+          id: item.id,
+          vector: tinyvecUtils.convertToFloat32Array(
+            item.vector ?? new Float32Array()
+          ),
+          metadata: JSON.stringify(item.metadata),
+        };
+      });
+
+      const updateResult = await nativeUpsertVectorsById(
+        this.filePath,
+        formattedItems
+      );
+
+      // Update DB file connection
+      nativeUpdateDbFileConnection(this.filePath);
+
+      return updateResult;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async getIndexStats(): Promise<tinyvecTypes.IndexFileStats> {
     return await nativeGetIndexStats(this.filePath);
   }
@@ -253,4 +289,5 @@ export type {
   TinyVecConfig,
   JsonValue,
   TinyVecSearchOptions,
+  UpdateItem,
 } from "./types";
