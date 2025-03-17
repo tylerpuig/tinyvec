@@ -1360,8 +1360,8 @@ int batch_update_items_by_id(const char *file_path, DBUpdateItem *items, int ite
         {
             if (item->vector_length != header_info->dimensions)
             {
-                fprintf(stderr, "Skipping vector update for ID %d: dimension mismatch (got %d, expected %d)\n",
-                        item->id, item->vector_length, header_info->dimensions);
+                // fprintf(stderr, "Skipping vector update for ID %d: dimension mismatch (got %d, expected %d)\n",
+                //         item->id, item->vector_length, header_info->dimensions);
                 continue;
             }
 
