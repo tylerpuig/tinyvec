@@ -120,7 +120,7 @@ class TinyVecClient:
             run_query
         )
 
-    async def insert(self, vectors: List[Insertion]):
+    async def insert(self, vectors: List[Insertion]) -> int:
         def insert_data():
             if len(vectors) == 0:
                 return 0
@@ -359,27 +359,34 @@ class TinyVecClient:
         if not items:
             return UpdateResult(updated_count=0, success=False)
 
-        try:
-            index_stats = await self.get_index_stats()
-            if not index_stats or index_stats.vector_count == 0:
-                return UpdateResult(updated_count=0, success=False)
+        index_stats = await self.get_index_stats()
+        if not index_stats or index_stats.vector_count == 0:
 
-            c_items, vector_refs, metadata_refs = prepare_db_update_items(
-                items)
+            return UpdateResult(updated_count=0, success=False)
 
-            updated_count = lib.batch_update_items_by_id(
-                self.encoded_path, c_items, len(items))
+        def update_items_by_id():
+            try:
+                c_items, vector_refs, metadata_refs = prepare_db_update_items(
+                    items)
 
-            if updated_count <= 0:
-                return UpdateResult(updated_count=0, success=False)
+                updated_count = lib.batch_update_items_by_id(
+                    self.encoded_path, c_items, len(items))
 
-            # Update DB file connection
-            lib.update_db_file_connection(self.encoded_path)
+                if updated_count <= 0:
+                    return UpdateResult(updated_count=0, success=False)
 
-            return UpdateResult(updated_count=updated_count, success=True)
+                # Update DB file connection
+                lib.update_db_file_connection(self.encoded_path)
 
-        except Exception as e:
-            raise e
+                return UpdateResult(updated_count=updated_count, success=True)
+
+            except Exception as e:
+                raise e
+
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            update_items_by_id
+        )
 
     async def get_index_stats(self) -> IndexStats:
         def run_stats():

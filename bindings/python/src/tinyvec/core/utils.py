@@ -116,30 +116,45 @@ def prepare_db_update_items(items: List[UpdateItem]) -> Tuple[ctypes.Array, list
         # Convert id
         c_items[i].id = item.id
 
-        # Convert metadata to JSON string, then to bytes
-        metadata_str = json.dumps(getattr(item, "metadata", None))
-        metadata_bytes = metadata_str.encode('utf-8')
-        c_items[i].metadata = metadata_bytes
-        metadata_references.append(metadata_bytes)  # Keep reference
-
-        # Convert vector to float32 array
-        vector = getattr(item, "vector", None)
-        if vector is None:
-            vector = np.array([], dtype=np.float32)
-        vector_float32 = get_float32_array(vector)
-        vector_length = len(vector_float32)
-
-        # Allocate memory for the vector and copy data
-        if vector_length > 0:
-            c_array = (ctypes.c_float * vector_length)(*vector_float32)
-            c_items[i].vector = ctypes.cast(
-                c_array, ctypes.POINTER(ctypes.c_float))
-            c_items[i].vector_length = vector_length
-            vector_references.append(c_array)  # Keep reference
+        # Handle metadata
+        metadata = getattr(item, "metadata", None)
+        if metadata is None:
+            c_items[i].metadata = None  # NULL pointer for c_char_p
         else:
+            # Process metadata normally
+            metadata_str = json.dumps(metadata)
+            metadata_bytes = metadata_str.encode('utf-8')
+            c_items[i].metadata = metadata_bytes
+            metadata_references.append(metadata_bytes)  # Keep reference
+
+        # Handle vector
+        vector = getattr(item, "vector", None)
+        if vector is None or (hasattr(vector, "size") and vector.size == 0):
             c_items[i].vector = ctypes.POINTER(
                 ctypes.c_float)()  # NULL pointer
             c_items[i].vector_length = 0
+        else:
+            try:
+                # Convert vector to float32 array
+                vector_float32 = get_float32_array(vector)
+                vector_length = len(vector_float32)
+
+                # Allocate memory for the vector and copy data
+                if vector_length > 0:
+                    c_array = (ctypes.c_float * vector_length)(*vector_float32)
+                    c_items[i].vector = ctypes.cast(
+                        c_array, ctypes.POINTER(ctypes.c_float))
+                    c_items[i].vector_length = vector_length
+                    vector_references.append(c_array)  # Keep reference
+                else:
+                    c_items[i].vector = ctypes.POINTER(
+                        ctypes.c_float)()  # NULL pointer
+                    c_items[i].vector_length = 0
+            except ValueError:
+                # If get_float32_array raises an error, use a NULL pointer
+                c_items[i].vector = ctypes.POINTER(
+                    ctypes.c_float)()  # NULL pointer
+                c_items[i].vector_length = 0
 
     # Return the prepared items and references to keep them alive
     return c_items, vector_references, metadata_references

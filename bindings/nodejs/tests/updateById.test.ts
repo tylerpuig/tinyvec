@@ -397,6 +397,7 @@ describe("TinyVecClient Update By Id Operations", () => {
     expect(insertions).toBe(1);
 
     const updateItems: UpdateItem[] = [
+      //@ts-ignore
       {
         id: idToUpdate,
       },
