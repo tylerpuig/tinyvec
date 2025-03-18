@@ -41,4 +41,18 @@ typedef struct ConnectionData
     uint32_t dimensions;
 } ConnectionData;
 
+typedef struct PaginationItem
+{
+    int id;
+    char *metadata;
+    float *vector;
+    int vector_length;
+} PaginationItem;
+
+typedef struct PaginationResults
+{
+    PaginationItem *results;
+    int count;
+} PaginationResults;
+
 #endif // VEC_TYPES_H
