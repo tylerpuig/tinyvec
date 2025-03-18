@@ -22,6 +22,8 @@ const nativeDeleteVectorsByFilter =
   nativeModule.deleteByFilter as tinyvecTypes.DeleteVectorsByFilterFunction;
 const nativeUpsertVectorsById =
   nativeModule.upsertById as tinyvecTypes.NativeUpdateVectorsByIdFunction;
+const nativeGetPaginatedVectors =
+  nativeModule.getPaginatedVectors as tinyvecTypes.NativeGetPaginatedVectorsFunction;
 
 class TinyVecClient {
   private filePath: string;
@@ -274,6 +276,26 @@ class TinyVecClient {
     } catch (error) {
       throw error;
     }
+  }
+
+  async getPaginatedVectors<TMeta = any>(options: {
+    skip: number;
+    limit: number;
+  }): Promise<tinyvecTypes.PaginationItem<TMeta>[]> {
+    if (!options) {
+      throw new Error("No options provided");
+    }
+    if (typeof options.skip !== "number" || options.skip < 0) {
+      throw new Error("Skip must be a positive number.");
+    }
+    if (typeof options.limit !== "number" || options.limit <= 0) {
+      throw new Error("Limit must be a positive number.");
+    }
+
+    // const optsStr = JSON.stringify(options);
+
+    const results = await nativeGetPaginatedVectors(this.filePath, options);
+    return results;
   }
 
   async getIndexStats(): Promise<tinyvecTypes.IndexFileStats> {

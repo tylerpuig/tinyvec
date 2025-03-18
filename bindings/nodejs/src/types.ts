@@ -40,6 +40,22 @@ export type NativeUpdateVectorsByIdFunction = (
   items: UpdateItem[]
 ) => Promise<UpdateResult>;
 
+export type PaginationItem<TMeta = any> = {
+  id: number;
+  metadata: TMeta;
+  vector: Float32Array;
+};
+
+export type PaginatedResults<TMeta = any> = {
+  results: PaginationItem<TMeta>[];
+  count: number;
+};
+
+export type NativeGetPaginatedVectorsFunction = (
+  filePath: string,
+  options: string
+) => Promise<PaginationItem[]>;
+
 export type TinyVecSearchResult<TMeta = any> = {
   id: number;
   similarity: number;
