@@ -1,6 +1,7 @@
 #include "tinyvec.h"
 #include "../../../src/core/include/db.h"
 #include "../../../src/core/include/file.h"
+#include "../../../src/core/include/paginate.h"
 #include <iostream>
 
 extern "C" DBSearchResult *vector_query(const char *file_path, const float *query_vec, const int top_k)
@@ -57,4 +58,8 @@ extern "C" bool update_instance_db_file_connection(const char *file_path)
 extern "C" int update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count)
 {
     return batch_update_items_by_id(file_path, items, item_count);
+}
+extern "C" PaginationResults *get_paginated_vectors(const char *file_path, const int skip, const int limit)
+{
+    return get_vectors_with_pagination(file_path, skip, limit);
 }

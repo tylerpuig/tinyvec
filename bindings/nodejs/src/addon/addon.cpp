@@ -8,6 +8,7 @@
 #include "../../../src/core/include/cJSON.h"
 #include "../../../src/core/include/file.h"
 #include "addon_utils.h"
+#include "paginate.hpp"
 
 namespace
 {
@@ -1295,6 +1296,8 @@ namespace
         status = napi_set_named_property(env, exports, "upsertById", updateVectorsByIdFn);
         if (status != napi_ok)
             return nullptr;
+
+        paginate_operations::RegisterPaginateModule(env, exports);
 
         return exports;
     }
