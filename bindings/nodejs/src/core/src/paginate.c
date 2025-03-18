@@ -223,13 +223,13 @@ bool get_metadata_batch_paginate(sqlite3 *db, PaginationItem *results, int batch
     }
 
     // Create SQL query
-    size_t query_len = snprintf(NULL, 0, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list) + 1;
+    size_t query_len = snprintf(NULL, 0, "SELECT id, metadata, metadata_length FROM metadata WHERE id IN (%s)", id_list) + 1;
     sql_query = (char *)malloc(query_len);
     if (!sql_query)
     {
         goto cleanup;
     }
-    snprintf(sql_query, query_len, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list);
+    snprintf(sql_query, query_len, "SELECT id, metadata, metadata_length FROM metadata WHERE id IN (%s)", id_list);
 
     // Prepare statement
     if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
@@ -257,6 +257,7 @@ bool get_metadata_batch_paginate(sqlite3 *db, PaginationItem *results, int batch
     {
         int id = sqlite3_column_int(stmt, 0);
         const char *metadata = (const char *)sqlite3_column_text(stmt, 1);
+        int metadata_length = sqlite3_column_int(stmt, 2);
 
         // Binary search for the ID
         IdIndexPair key = {.id = id};
@@ -266,15 +267,15 @@ bool get_metadata_batch_paginate(sqlite3 *db, PaginationItem *results, int batch
         if (found)
         {
             int index = found->index;
-
-            // Copy metadata if present
             if (metadata)
             {
-                size_t metadata_len = strlen(metadata) + 1;
+                size_t metadata_len = metadata_length + 1;
                 results[index].metadata = (char *)malloc(metadata_len);
+                results[index].md_length = metadata_length;
                 if (results[index].metadata)
                 {
-                    memcpy(results[index].metadata, metadata, metadata_len);
+                    memcpy(results[index].metadata, metadata, metadata_length);
+                    results[index].metadata[metadata_length] = '\0'; // Ensure null termination
                 }
             }
         }

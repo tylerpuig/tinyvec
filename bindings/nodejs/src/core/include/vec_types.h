@@ -45,6 +45,7 @@ typedef struct PaginationItem
 {
     int id;
     char *metadata;
+    int md_length;
     float *vector;
     int vector_length;
 } PaginationItem;

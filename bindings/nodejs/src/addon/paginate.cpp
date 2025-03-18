@@ -3,6 +3,8 @@
 #include "tinyvec.h"
 #include "paginate.hpp"
 #include <iostream>
+#include "../../../src/core/include/cJSON.h"
+#include "addon_utils.h"
 
 namespace paginate_operations
 {
@@ -18,12 +20,10 @@ namespace paginate_operations
                 pagination_data->offset,
                 pagination_data->limit);
 
-            // Store the results in the async data for use in the complete callback
             pagination_data->results = results;
         }
         catch (...)
         {
-            // Catch any exceptions to prevent them from propagating to Node.js
             pagination_data->results = nullptr;
         }
     }
@@ -71,8 +71,21 @@ namespace paginate_operations
                 // Set metadata if available
                 if (item.metadata != nullptr)
                 {
-                    napi_create_string_utf8(env, item.metadata, NAPI_AUTO_LENGTH, &metadata_value);
-                    napi_set_named_property(env, item_obj, "metadata", metadata_value);
+
+                    cJSON *parsed_json = cJSON_ParseWithLength((char *)item.metadata, item.md_length);
+
+                    if (parsed_json)
+                    {
+                        metadata_value = convert_json_to_napi(env, parsed_json);
+                        cJSON_Delete(parsed_json); // Clean up after conversion
+                        napi_set_named_property(env, item_obj, "metadata", metadata_value);
+                    }
+                    else
+                    {
+                        // Fallback to string if JSON parsing fails
+                        napi_create_string_utf8(env, item.metadata, NAPI_AUTO_LENGTH, &metadata_value);
+                        napi_set_named_property(env, item_obj, "metadata", metadata_value);
+                    }
                 }
 
                 // Create and set vector array if available
@@ -94,21 +107,10 @@ namespace paginate_operations
 
             // Resolve the promise with the result array
             napi_resolve_deferred(env, pagination_data->deferred, result);
-
-            // Free the results returned by C
         }
 
         // Clean up
-        if (pagination_data->file_path != nullptr)
-        {
-            free(pagination_data->file_path);
-        }
-
-        // Delete async work
-        napi_delete_async_work(env, pagination_data->work);
-
-        // Free the async data
-        delete pagination_data;
+        CleanupAsyncPaginationData(env, pagination_data, true);
     }
 
     napi_value GetPaginatedVectors(napi_env env, napi_callback_info info)
@@ -163,8 +165,7 @@ namespace paginate_operations
         status = napi_get_value_string_utf8(env, args[0], async_data->file_path, file_path_length + 1, nullptr);
         if (status != napi_ok)
         {
-            free(async_data->file_path);
-            delete async_data;
+            CleanupAsyncPaginationData(env, async_data, true);
             napi_throw_error(env, nullptr, "Failed to get file path value");
             return nullptr;
         }
@@ -209,8 +210,7 @@ namespace paginate_operations
         status = napi_create_promise(env, &async_data->deferred, &promise);
         if (status != napi_ok)
         {
-            free(async_data->file_path);
-            delete async_data;
+            CleanupAsyncPaginationData(env, async_data, true);
             napi_throw_error(env, nullptr, "Failed to create promise");
             return nullptr;
         }
@@ -219,8 +219,7 @@ namespace paginate_operations
         status = napi_create_string_utf8(env, "GetPaginatedVectors", NAPI_AUTO_LENGTH, &resource_name);
         if (status != napi_ok)
         {
-            free(async_data->file_path);
-            delete async_data;
+            CleanupAsyncPaginationData(env, async_data, true);
             napi_throw_error(env, nullptr, "Failed to create resource name");
             return nullptr;
         }
@@ -237,8 +236,7 @@ namespace paginate_operations
 
         if (status != napi_ok)
         {
-            free(async_data->file_path);
-            delete async_data;
+            CleanupAsyncPaginationData(env, async_data, true);
             napi_throw_error(env, nullptr, "Failed to create async work");
             return nullptr;
         }
@@ -247,14 +245,91 @@ namespace paginate_operations
         status = napi_queue_async_work(env, async_data->work);
         if (status != napi_ok)
         {
-            free(async_data->file_path);
-            napi_delete_async_work(env, async_data->work);
+            CleanupAsyncPaginationData(env, async_data, true);
             delete async_data;
             napi_throw_error(env, nullptr, "Failed to queue async work");
             return nullptr;
         }
 
         return promise;
+    }
+
+    void FreePaginationResults(PaginationResults *results)
+    {
+        if (results == nullptr)
+        {
+            return;
+        }
+
+        // Free each item in the results array
+        if (results->results != nullptr)
+        {
+            for (int i = 0; i < results->count; i++)
+            {
+                PaginationItem *item = &(results->results[i]);
+
+                // Free metadata if it exists
+                if (item->metadata != nullptr)
+                {
+                    free(item->metadata);
+                    item->metadata = nullptr;
+                }
+
+                // Free vector if it exists
+                if (item->vector != nullptr)
+                {
+                    free(item->vector);
+                    item->vector = nullptr;
+                }
+            }
+
+            // Free the results array itself
+            free(results->results);
+            results->results = nullptr;
+        }
+
+        // Free the results structure
+        free(results);
+    }
+
+    /**
+     * Cleans up all resources allocated for AsyncPaginationData
+     * This should be called when async work is complete (whether successful or not)
+     *
+     * @param env The N-API environment
+     * @param data Pointer to the AsyncPaginationData structure to clean up
+     * @param work_status Whether to also delete the async work
+     */
+    void CleanupAsyncPaginationData(napi_env env, AsyncPaginationData *data, bool delete_work = true)
+    {
+        if (data == nullptr)
+        {
+            return;
+        }
+
+        // Free the file path if it exists
+        if (data->file_path != nullptr)
+        {
+            free(data->file_path);
+            data->file_path = nullptr;
+        }
+
+        // Free the pagination results
+        if (data->results != nullptr)
+        {
+            FreePaginationResults(data->results);
+            data->results = nullptr;
+        }
+
+        // Delete the async work if requested
+        if (delete_work && data->work != nullptr)
+        {
+            napi_delete_async_work(env, data->work);
+            data->work = nullptr;
+        }
+
+        // Free the data structure itself
+        delete data;
     }
 
     // Module registration

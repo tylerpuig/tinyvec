@@ -19,4 +19,6 @@ namespace paginate_operations
     void CompleteGetPaginatedVectors(napi_env env, napi_status status, void *data);
     napi_value GetPaginatedVectors(napi_env env, napi_callback_info info);
     napi_value RegisterPaginateModule(napi_env env, napi_value exports);
+    void FreePaginationResults(PaginationResults *results);
+    void CleanupAsyncPaginationData(napi_env env, AsyncPaginationData *data, bool delete_work);
 }
