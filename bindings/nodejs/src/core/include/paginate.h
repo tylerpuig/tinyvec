@@ -2,7 +2,7 @@
 #define PAGINATE_H
 
 #include <stdbool.h>
-#include <sqlite3.h>
+#include "sqlite3.h"
 #include "../include/vec_types.h"
 
 typedef struct IdIndexPair

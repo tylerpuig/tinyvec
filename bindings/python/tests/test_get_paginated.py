@@ -36,7 +36,7 @@ def unique_client():
 
 @pytest.mark.asyncio
 async def test_get_paginated_single_entry(unique_client):
-    """Test that getPaginated returns a single entry correctly."""
+    """Test that get_paginated returns a single entry correctly."""
     # Insert a single vector
     insertion = tinyvec.Insertion(
         vector=np.random.rand(128).astype(np.float32),
@@ -65,7 +65,7 @@ async def test_get_paginated_single_entry(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_multiple_entries(unique_client):
-    """Test that getPaginated returns multiple entries with correct pagination."""
+    """Test that get_paginated returns multiple entries with correct pagination."""
     # Insert 10 vectors
     insertions = []
     for i in range(10):
@@ -105,7 +105,7 @@ async def test_get_paginated_multiple_entries(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_empty_database(unique_client):
-    """Test that getPaginated returns an empty array when database is empty."""
+    """Test that get_paginated returns an empty array when database is empty."""
     config = tinyvec.PaginationConfig(skip=0, limit=10)
     paginated_results = await unique_client.get_paginated(config)
 
@@ -114,7 +114,7 @@ async def test_get_paginated_empty_database(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_skip_exceeds_count(unique_client):
-    """Test that getPaginated returns an empty array when skip exceeds vector count."""
+    """Test that get_paginated returns an empty array when skip exceeds vector count."""
     # Insert 5 vectors
     insertions = []
     for i in range(5):
@@ -135,7 +135,7 @@ async def test_get_paginated_skip_exceeds_count(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_adjust_limit(unique_client):
-    """Test that getPaginated adjusts limit to match available vectors."""
+    """Test that get_paginated adjusts limit to match available vectors."""
     # Insert 3 vectors
     insertions = []
     for i in range(3):
@@ -156,7 +156,7 @@ async def test_get_paginated_adjust_limit(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_complex_metadata(unique_client):
-    """Test that getPaginated handles complex metadata correctly."""
+    """Test that get_paginated handles complex metadata correctly."""
     complex_metadata = {
         "id": 1,
         "type": "document",
@@ -184,7 +184,7 @@ async def test_get_paginated_complex_metadata(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_invalid_skip(unique_client):
-    """Test that getPaginated throws error with invalid skip parameter."""
+    """Test that get_paginated throws error with invalid skip parameter."""
     with pytest.raises(Exception) as excinfo:
         config = tinyvec.PaginationConfig(skip=-1, limit=10)
         await unique_client.get_paginated(config)
@@ -194,7 +194,7 @@ async def test_get_paginated_invalid_skip(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_invalid_limit(unique_client):
-    """Test that getPaginated throws error with invalid limit parameter."""
+    """Test that get_paginated throws error with invalid limit parameter."""
     # Test zero limit
     with pytest.raises(Exception) as excinfo1:
         config = tinyvec.PaginationConfig(skip=0, limit=0)
@@ -212,7 +212,7 @@ async def test_get_paginated_invalid_limit(unique_client):
 
 @pytest.mark.asyncio
 async def test_get_paginated_large_dataset(unique_client):
-    """Test that getPaginated handles a large dataset with proper pagination."""
+    """Test that get_paginated handles a large dataset with proper pagination."""
     total_items = 100
     page_size = 25
 

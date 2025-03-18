@@ -412,7 +412,7 @@ class TinyVecClient:
                 # Extract the vector from the pointer to a Python list
                 vector_array = np.ctypeslib.as_array(
                     results.results[i].vector,
-                    shape=(results.results[i].vector_length)
+                    shape=(results.results[i].vector_length,)
                 ).copy().tolist()
 
                 # Convert metadata from char* to JSON
