@@ -278,10 +278,9 @@ class TinyVecClient {
     }
   }
 
-  async getPaginatedVectors<TMeta = any>(options: {
-    skip: number;
-    limit: number;
-  }): Promise<tinyvecTypes.PaginationItem<TMeta>[]> {
+  async getPaginated<TMeta = any>(
+    options: tinyvecTypes.PaginationConfig
+  ): Promise<tinyvecTypes.PaginationItem<TMeta>[]> {
     if (!options) {
       throw new Error("No options provided");
     }
@@ -292,7 +291,17 @@ class TinyVecClient {
       throw new Error("Limit must be a positive number.");
     }
 
-    // const optsStr = JSON.stringify(options);
+    const indexStats = await this.getIndexStats();
+    if (!indexStats || !indexStats.vectors) {
+      return [];
+    }
+    if (options.skip > indexStats.vectors) {
+      return [];
+    }
+
+    if (options.limit > indexStats.vectors) {
+      options.limit = indexStats.vectors;
+    }
 
     const results = await nativeGetPaginatedVectors(this.filePath, options);
     return results;

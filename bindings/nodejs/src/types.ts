@@ -51,9 +51,13 @@ export type PaginatedResults<TMeta = any> = {
   count: number;
 };
 
+export type PaginationConfig = {
+  skip: number;
+  limit: number;
+};
 export type NativeGetPaginatedVectorsFunction = (
   filePath: string,
-  options: string
+  options: PaginationConfig
 ) => Promise<PaginationItem[]>;
 
 export type TinyVecSearchResult<TMeta = any> = {
