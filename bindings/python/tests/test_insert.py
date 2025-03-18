@@ -1,25 +1,11 @@
 import tinyvec
 import pytest
-import numpy as np
-from typing import List, Dict, Any, cast
-from dataclasses import dataclass
-import random
+from typing import Dict, Any, cast
+from utils import generate_random_vector, generate_random_vector_list
 import uuid
 import os
 
 DIMENSIONS = 128
-
-pytest_plugins = ['pytest_asyncio']
-
-
-def generate_random_vector(dimensions: int) -> np.ndarray:
-    """Generate a random vector with given dimensions."""
-    return np.random.rand(dimensions).astype(np.float32)
-
-
-def generate_random_vector_list(dimensions: int) -> List[float]:
-    """Generate a random vector with given dimensions."""
-    return [random.random() for _ in range(dimensions)]
 
 
 @pytest.fixture
