@@ -66,4 +66,14 @@ extern "C"
 }
 #endif
 
+// Platform-specific aligned memory functions
+#ifdef _WIN32
+#define aligned_malloc(size, alignment) _aligned_malloc(size, alignment)
+#define aligned_free(ptr) _aligned_free(ptr)
+#else
+// For macOS and Linux
+void *aligned_malloc(size_t size, size_t alignment);
+#define aligned_free(ptr) free(ptr)
+#endif
+
 #endif // DB_H

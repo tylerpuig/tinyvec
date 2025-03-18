@@ -31,7 +31,7 @@ class CustomBuildExt(build_ext):
         print(f"Setup directory: {setup_dir}")
 
         sources = ['db.c', 'minheap.c', 'distance.c',
-                   'file.c', 'cJSON.c', 'sqlite3.c', 'utils.c', 'query_convert.c']
+                   'file.c', 'cJSON.c', 'sqlite3.c', 'utils.c', 'query_convert.c', 'paginate.c']
         source_paths = [os.path.join(
             setup_dir, 'src', 'core', 'src', src) for src in sources]
 
