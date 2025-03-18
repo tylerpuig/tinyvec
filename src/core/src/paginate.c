@@ -1,3 +1,5 @@
+#include <stdlib.h> /* For malloc, free, and bsearch */
+#include <string.h> /* For memset, memcpy, strcat, and strlen */
 #include "../include/paginate.h"
 #include "../include/vec_types.h"
 #include "../include/db.h"
