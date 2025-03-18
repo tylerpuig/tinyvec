@@ -1,6 +1,8 @@
 #ifndef PAGINATE_H
 #define PAGINATE_H
 
+#include <stdbool.h>
+#include <sqlite3.h>
 #include "../include/vec_types.h"
 
 typedef struct IdIndexPair
@@ -16,6 +18,8 @@ extern "C"
 
     PaginationResults *get_vectors_with_pagination(const char *file_path, const int skip, const int limit);
     int compare_id_index_pairs(const void *a, const void *b);
+    bool get_metadata_batch_paginate(sqlite3 *db, PaginationItem *results, int batch_start, int batch_size);
+    char *create_id_list(PaginationItem *items, int count);
 
 #ifdef __cplusplus
 }

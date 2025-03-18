@@ -18,18 +18,11 @@ namespace paginate_operations
                 pagination_data->offset,
                 pagination_data->limit);
 
-            if (results)
-            {
-                std::cout << "Pagination success" << std::endl;
-                std::cout << "Results: " << results->count << std::endl;
-            }
-
             // Store the results in the async data for use in the complete callback
             pagination_data->results = results;
         }
         catch (...)
         {
-            std::cout << "Pagination error" << std::endl;
             // Catch any exceptions to prevent them from propagating to Node.js
             pagination_data->results = nullptr;
         }
@@ -41,7 +34,13 @@ namespace paginate_operations
         AsyncPaginationData *pagination_data = static_cast<AsyncPaginationData *>(data);
         napi_value result;
 
-        if (status != napi_ok || pagination_data->results == nullptr || pagination_data->results->results == nullptr)
+        if (pagination_data->results == nullptr || pagination_data->results->results == nullptr)
+        {
+
+            napi_create_array_with_length(env, 0, &result);
+            napi_resolve_deferred(env, pagination_data->deferred, result);
+        }
+        else if (status != napi_ok)
         {
             // Create error object
             napi_value error, error_message;
@@ -59,7 +58,6 @@ namespace paginate_operations
             // Fill array with vector objects
             for (int i = 0; i < pagination_data->results->count; i++)
             {
-                std::cout << "Item: " << i << std::endl;
                 PaginationItem item = pagination_data->results->results[i];
                 napi_value item_obj, vector_array, id_value, metadata_value;
 
@@ -70,16 +68,12 @@ namespace paginate_operations
                 napi_create_int32(env, item.id, &id_value);
                 napi_set_named_property(env, item_obj, "id", id_value);
 
-                std::cout << "ID set" << item.id << std::endl;
-
                 // Set metadata if available
                 if (item.metadata != nullptr)
                 {
                     napi_create_string_utf8(env, item.metadata, NAPI_AUTO_LENGTH, &metadata_value);
                     napi_set_named_property(env, item_obj, "metadata", metadata_value);
                 }
-
-                std::cout << "Metadata set" << std::endl;
 
                 // Create and set vector array if available
                 if (item.vector != nullptr && item.vector_length > 0)
@@ -94,20 +88,14 @@ namespace paginate_operations
                     napi_set_named_property(env, item_obj, "vector", vector_array);
                 }
 
-                std::cout << "Vector set" << std::endl;
-
                 // Add this item to the result array
                 napi_set_element(env, result, i, item_obj);
-                std::cout << "Element set" << std::endl;
             }
 
             // Resolve the promise with the result array
             napi_resolve_deferred(env, pagination_data->deferred, result);
-            std::cout << "Resolved" << std::endl;
 
-            // Free the results returned by C code
-            // Assuming there's a free_pagination_results function available
-            // free_pagination_results(paginationData->results);
+            // Free the results returned by C
         }
 
         // Clean up

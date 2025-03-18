@@ -2,6 +2,8 @@
 #include "../include/vec_types.h"
 #include "../include/db.h"
 
+const int MAX_IDS_PER_BATCH = 999;
+
 PaginationResults *get_vectors_with_pagination(const char *file_path, const int skip, const int limit)
 {
     TinyVecConnection *connection = NULL;
@@ -14,26 +16,19 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     connection = get_tinyvec_connection(file_path);
     if (!connection)
     {
-        printf("Failed to get connection\n");
         return NULL;
     }
-
-    printf("file_path: %s\n", file_path);
-    printf("dimensions: %d\n", connection->dimensions);
-    printf("skip: %d\n", skip);
-    printf("limit: %d\n", limit);
 
     // Get header info, also resets the file position
     header_info = get_vec_file_header_info(connection->vec_file, connection->dimensions);
     if (!header_info)
     {
-        printf("Failed to get header info\n");
         return NULL;
     }
 
     if (header_info->dimensions == 0 || header_info->vector_count == 0)
     {
-        printf("Dimensions or vector count is zero\n");
+
         free(header_info);
         return NULL;
     }
@@ -44,7 +39,7 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     // Ensure skip is within bounds
     if (skip >= total_count)
     {
-        printf("Skip is greater than total count\n");
+
         free(header_info);
         return NULL;
     }
@@ -58,12 +53,10 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
 
     // Calculate the record size (one float for ID + dimensions floats for the vector)
     const size_t record_size = (header_info->dimensions + 1) * sizeof(float);
-    // printf("Record size: %zu\n", record_size);
 
     // Just need to skip ahead by the number of records we want to skip
     if (fseek(connection->vec_file, skip * record_size, SEEK_CUR) != 0)
     {
-        printf("Failed to seek to skip position\n");
         free(header_info);
         return NULL;
     }
@@ -72,7 +65,6 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     vec_buffer = (float *)aligned_malloc(record_size * effective_limit, 16);
     if (!vec_buffer)
     {
-        printf("Failed to allocate vec_buffer\n");
         free(header_info);
         return NULL;
     }
@@ -81,7 +73,6 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     size_t read = fread(vec_buffer, record_size, effective_limit, connection->vec_file);
     if (read != effective_limit)
     {
-        printf("Failed to read vec_buffer\n");
         aligned_free(vec_buffer);
         free(header_info);
         return NULL;
@@ -91,7 +82,6 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     results = (PaginationItem *)malloc(sizeof(PaginationItem) * effective_limit);
     if (!results)
     {
-        printf("Failed to allocate results\n");
         aligned_free(vec_buffer);
         free(header_info);
         return NULL;
@@ -106,7 +96,6 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
     if (!id_list)
     {
 
-        printf("Failed to allocate id_list\n");
         // Cleanup allocated vectors
         for (int i = 0; i < effective_limit; i++)
         {
@@ -124,14 +113,10 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
 
     id_list[0] = '\0';
 
-    printf("id_list: '%s'\n", id_list);
-
     for (int i = 0; i < effective_limit; i++)
     {
         float *vec_block = vec_buffer + (i * (header_info->dimensions + 1));
         int metadata_id = (int)vec_block[0];
-
-        printf("ID: %d\n", metadata_id);
 
         // Store ID
         results[i].id = metadata_id;
@@ -160,111 +145,32 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
         id_list[len - 1] = '\0';
     }
 
-    printf("len: %zu\n", len);
-
-    // Create SQL query to get metadata for all IDs at once
-    char *sql_query = NULL;
-    size_t query_len = snprintf(NULL, 0, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list) + 1;
-    sql_query = (char *)malloc(query_len);
-    if (sql_query != NULL)
+    for (int batch_start = 0; batch_start < effective_limit; batch_start += MAX_IDS_PER_BATCH)
     {
-        snprintf(sql_query, query_len, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list);
-    }
-    printf("SQL query: '%s'\n", sql_query);
+        int batch_size = (batch_start + MAX_IDS_PER_BATCH > effective_limit) ? (effective_limit - batch_start) : MAX_IDS_PER_BATCH;
 
-    // Execute the query
-    sqlite3_stmt *stmt;
-    if (sqlite3_prepare_v2(connection->sqlite_db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
-    {
-        printf("Failed to prepare statement\n");
-        free(sql_query);
-
-        // Cleanup allocated vectors
-        for (int i = 0; i < effective_limit; i++)
+        if (!get_metadata_batch_paginate(connection->sqlite_db, results, batch_start, batch_size))
         {
-            if (results[i].vector)
+            // Handle error - cleanup and return NULL
+            for (int i = 0; i < effective_limit; i++)
             {
-                free(results[i].vector);
-            }
-        }
-
-        free(results);
-        aligned_free(vec_buffer);
-        free(header_info);
-        return NULL;
-    }
-
-    IdIndexPair *id_index_pairs = (IdIndexPair *)malloc(sizeof(IdIndexPair) * effective_limit);
-    if (!id_index_pairs)
-    {
-        printf("Failed to allocate id_index_pairs\n");
-        free(sql_query);
-
-        // Cleanup allocated vectors
-        for (int i = 0; i < effective_limit; i++)
-        {
-            if (results[i].vector)
-            {
-                free(results[i].vector);
-            }
-        }
-
-        free(results);
-        aligned_free(vec_buffer);
-        free(header_info);
-        return NULL;
-    }
-
-    // Fill the array with ID-index pairs
-    for (int i = 0; i < effective_limit; i++)
-    {
-        id_index_pairs[i].id = results[i].id;
-        id_index_pairs[i].index = i;
-    }
-
-    printf("Filled array\n");
-
-    // Sort the array by ID for binary search
-    qsort(id_index_pairs, effective_limit, sizeof(IdIndexPair), compare_id_index_pairs);
-
-    printf("Sorted\n");
-
-    // Process the metadata results
-    while (sqlite3_step(stmt) == SQLITE_ROW)
-    {
-        int id = sqlite3_column_int(stmt, 0);
-        const char *metadata = (const char *)sqlite3_column_text(stmt, 1);
-
-        // Binary search for the ID
-        IdIndexPair key = {.id = id};
-        IdIndexPair *found = bsearch(&key, id_index_pairs, effective_limit,
-                                     sizeof(IdIndexPair), compare_id_index_pairs);
-
-        if (found)
-        {
-
-            printf("Found ID: %d\n", id);
-
-            // printf("Found ID: %d\n", found->id);
-            int index = found->index;
-
-            // Copy metadata if present
-            if (metadata)
-            {
-                size_t metadata_len = strlen(metadata) + 1;
-                results[index].metadata = (char *)malloc(metadata_len);
-                if (results[index].metadata)
+                if (results[i].vector)
                 {
-                    memcpy(results[index].metadata, metadata, metadata_len);
+                    free(results[i].vector);
+                }
+                if (results[i].metadata)
+                {
+                    free(results[i].metadata);
                 }
             }
+            free(results);
+            aligned_free(vec_buffer);
+            free(header_info);
+            return NULL;
         }
     }
 
-    sqlite3_finalize(stmt);
     free(id_list);
-    free(sql_query);
-    free(id_index_pairs);
 
     // Cleanup the vector buffer
     aligned_free(vec_buffer);
@@ -290,7 +196,6 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
         return NULL;
     }
 
-    printf("Returning results\n");
     pagination_results->results = results;
     pagination_results->count = effective_limit;
     return pagination_results;
@@ -299,4 +204,122 @@ PaginationResults *get_vectors_with_pagination(const char *file_path, const int 
 int compare_id_index_pairs(const void *a, const void *b)
 {
     return ((IdIndexPair *)a)->id - ((IdIndexPair *)b)->id;
+}
+
+// Function to get and process metadata for a batch of IDs
+bool get_metadata_batch_paginate(sqlite3 *db, PaginationItem *results, int batch_start, int batch_size)
+{
+    char *id_list = NULL;
+    char *sql_query = NULL;
+    sqlite3_stmt *stmt = NULL;
+    IdIndexPair *id_index_pairs = NULL;
+    bool success = false;
+
+    // Create ID list string for this batch
+    id_list = create_id_list(&results[batch_start], batch_size);
+    if (!id_list)
+    {
+        goto cleanup;
+    }
+
+    // Create SQL query
+    size_t query_len = snprintf(NULL, 0, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list) + 1;
+    sql_query = (char *)malloc(query_len);
+    if (!sql_query)
+    {
+        goto cleanup;
+    }
+    snprintf(sql_query, query_len, "SELECT id, metadata FROM metadata WHERE id IN (%s)", id_list);
+
+    // Prepare statement
+    if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, NULL) != SQLITE_OK)
+    {
+        goto cleanup;
+    }
+
+    // Create ID-index pairs for this batch
+    id_index_pairs = (IdIndexPair *)malloc(sizeof(IdIndexPair) * batch_size);
+    if (!id_index_pairs)
+    {
+        goto cleanup;
+    }
+
+    // Fill and sort the ID-index pairs
+    for (int i = 0; i < batch_size; i++)
+    {
+        id_index_pairs[i].id = results[batch_start + i].id;
+        id_index_pairs[i].index = batch_start + i;
+    }
+    qsort(id_index_pairs, batch_size, sizeof(IdIndexPair), compare_id_index_pairs);
+
+    // Process the metadata results
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        int id = sqlite3_column_int(stmt, 0);
+        const char *metadata = (const char *)sqlite3_column_text(stmt, 1);
+
+        // Binary search for the ID
+        IdIndexPair key = {.id = id};
+        IdIndexPair *found = bsearch(&key, id_index_pairs, batch_size,
+                                     sizeof(IdIndexPair), compare_id_index_pairs);
+
+        if (found)
+        {
+            int index = found->index;
+
+            // Copy metadata if present
+            if (metadata)
+            {
+                size_t metadata_len = strlen(metadata) + 1;
+                results[index].metadata = (char *)malloc(metadata_len);
+                if (results[index].metadata)
+                {
+                    memcpy(results[index].metadata, metadata, metadata_len);
+                }
+            }
+        }
+    }
+
+    success = true;
+
+cleanup:
+    if (stmt)
+        sqlite3_finalize(stmt);
+    if (sql_query)
+        free(sql_query);
+    if (id_list)
+        free(id_list);
+    if (id_index_pairs)
+        free(id_index_pairs);
+
+    return success;
+}
+
+// Helper function to create comma-separated ID list
+char *create_id_list(PaginationItem *items, int count)
+{
+    // Each ID could take up to 10 digits, plus a comma and some extra space
+    char *id_list = (char *)malloc(count * 12);
+    if (!id_list)
+    {
+        return NULL;
+    }
+
+    id_list[0] = '\0';
+
+    for (int i = 0; i < count; i++)
+    {
+        char id_str[12];
+        snprintf(id_str, sizeof(id_str), "%d,", items[i].id);
+        strcat(id_list, id_str);
+    }
+
+    // Remove trailing comma
+    size_t len = strlen(id_list);
+    if (len > 0)
+    {
+        id_list[len - 1] = '\0';
+    }
+
+    return id_list;
 }
