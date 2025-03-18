@@ -5,7 +5,7 @@ TinyVec - A tiny vector database for Python
 __version__ = "0.2.3"
 
 from .client import TinyVecClient
-from .models import ClientConfig, SearchResult, Insertion, IndexStats, SearchOptions, UpdateItem
+from .models import ClientConfig, SearchResult, Insertion, IndexStats, SearchOptions, UpdateItem, PaginationConfig, PaginationItem
 
 __all__ = [
     'TinyVecClient',
@@ -14,5 +14,7 @@ __all__ = [
     'Insertion',
     'IndexStats',
     'SearchOptions',
-    'UpdateItem'
+    'UpdateItem',
+    'PaginationConfig',
+    'PaginationItem'
 ]

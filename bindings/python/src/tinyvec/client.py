@@ -7,6 +7,7 @@ import os
 import struct
 import ctypes
 import shutil
+import numpy as np
 from typing import List
 from .core.utils import create_db_files, file_exists, ensure_absolute_path, get_float32_array, write_file_header, prepare_db_update_items
 from .types import VectorInput
@@ -21,7 +22,9 @@ from .models import (
     SearchOptions,
     DeletionResult,
     UpdateResult,
-    UpdateItem
+    UpdateItem,
+    PaginationConfig,
+    PaginationItem
 )
 
 
@@ -385,6 +388,54 @@ class TinyVecClient:
         return await asyncio.get_event_loop().run_in_executor(
             self.executor,
             update_items_by_id
+        )
+
+    async def get_paginated(self, config: PaginationConfig) -> List[PaginationItem]:
+        index_stats = await self.get_index_stats()
+        if not index_stats or index_stats.vector_count == 0:
+            return []
+        if config.skip > index_stats.vector_count:
+            return []
+        if config.limit > index_stats.vector_count:
+            config.limit = index_stats.vector_count
+
+        def run_paginated():
+            results_ptr = lib.get_vectors_with_pagination(
+                self.encoded_path, config.skip, config.limit)
+            if not results_ptr:
+                return []
+
+            results = results_ptr.contents
+            paginated_results = []
+
+            for i in range(results.count):
+                # Extract the vector from the pointer to a Python list
+                vector_array = np.ctypeslib.as_array(
+                    results.results[i].vector,
+                    shape=(results.results[i].vector_length)
+                ).copy().tolist()
+
+                # Convert metadata from char* to JSON
+                metadata_str = results.results[i].metadata
+                metadata_json = None
+                if metadata_str:
+                    try:
+                        metadata_json = json.loads(
+                            metadata_str[:results.results[i].md_length])
+                    except Exception:
+                        pass
+
+                paginated_results.append(PaginationItem(
+                    id=results.results[i].id,
+                    metadata=metadata_json,
+                    vector=vector_array
+                ))
+
+            return paginated_results
+
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            run_paginated
         )
 
     async def get_index_stats(self) -> IndexStats:

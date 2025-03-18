@@ -85,6 +85,23 @@ class DBUpdateItem(ctypes.Structure):
     ]
 
 
+class PaginationItem(ctypes.Structure):
+    _fields_ = [
+        ("id", ctypes.c_int),
+        ("metadata", ctypes.c_char_p),
+        ("md_length", ctypes.c_int),
+        ("vector", ctypes.POINTER(ctypes.c_float)),
+        ("vector_length", ctypes.c_int)
+    ]
+
+
+class PaginationResults(ctypes.Structure):
+    _fields_ = [
+        ("results", ctypes.POINTER(PaginationItem)),
+        ("count", ctypes.c_int)
+    ]
+
+
 # Load the library
 lib = ctypes.CDLL(str(get_lib_path()))
 
@@ -142,3 +159,10 @@ lib.batch_update_items_by_id.argtypes = [
     ctypes.c_int
 ]
 lib.batch_update_items_by_id.restype = ctypes.c_int
+
+lib.get_vectors_with_pagination.argtypes = [
+    ctypes.c_char_p,
+    ctypes.c_int,
+    ctypes.c_int
+]
+lib.get_vectors_with_pagination.restype = ctypes.POINTER(PaginationResults)
