@@ -15,10 +15,10 @@ extern "C"
     int delete_vecs_by_ids(const char *file_path, int *ids_to_delete, int delete_count);
     int delete_vecs_by_filter(const char *file_path, const char *json_filter);
     int update_items_by_id(const char *file_path, DBUpdateItem *items, int item_count);
+    PaginationResults *get_paginated_vectors(const char *file_path, const int skip, const int limit);
 
-    int
-    insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
-                        const size_t vec_count, const uint32_t dimensions);
+    int insert_many_vectors(const char *file_path, float **vectors, char **metadatas, size_t *metadata_lengths,
+                            const size_t vec_count, const uint32_t dimensions);
 
     TinyVecConnection *connect_to_db(const char *file_path, const TinyVecConnectionConfig *config);
 

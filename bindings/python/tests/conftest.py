@@ -1,7 +1,6 @@
 import pytest
 from pathlib import Path
 import shutil
-import time
 
 import sys
 import os
@@ -24,18 +23,6 @@ def base_temp_dir():
         shutil.rmtree(temp_dir, ignore_errors=True)
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-# @pytest.fixture(scope="function")
-# def temp_dir(base_temp_dir):
-#     """Create a temporary directory for each test inside 'temp'."""
-#     test_dir = Path(base_temp_dir) / f"test-{int(time.time() * 1000)}"
-#     test_dir.mkdir()
-#     yield test_dir
-#     try:
-#         shutil.rmtree(test_dir, ignore_errors=True)
-#     except Exception:
-#         shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest.fixture

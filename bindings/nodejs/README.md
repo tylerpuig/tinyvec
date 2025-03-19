@@ -306,6 +306,58 @@ console.log(
 );
 ```
 
+##### `async getPaginated(config)`
+
+Retrieves database entries with pagination support.
+
+**Parameters:**
+
+- `config`: `PaginationConfig` - Configuration object containing skip and limit parameters for pagination
+
+**Returns:**
+
+- `Array<PaginationItem>` - Array of paginated items, each containing ID, metadata, and vector data
+
+**Example:**
+
+```typescript
+import { TinyVecClient, type PaginationConfig } from "tinyvecdb";
+
+// Create a pagination configuration
+const config: PaginationConfig = {
+  skip: 0,
+  limit: 10,
+};
+
+// Retrieve paginated results
+const paginatedItems = await client.getPaginated(config);
+console.log(`Retrieved ${paginatedItems.length} items`);
+
+// Process the results
+for (const item of paginatedItems) {
+  console.log(`ID: ${item.id}, Metadata:`, item.metadata);
+}
+
+// Get the next page
+const nextPageConfig: PaginationConfig = {
+  skip: 10,
+  limit: 10,
+};
+const nextPage = await client.getPaginated(nextPageConfig);
+console.log(`Next page has ${nextPage.length} items`);
+```
+
+The `PaginationConfig` type requires two properties:
+
+- `skip`: Number of items to skip (must be non-negative)
+- `limit`: Maximum number of items to return (must be positive)
+
+Each returned pagination item contains:
+
+- `id`: Unique identifier for the vector
+- `metadata`: Associated metadata (as a JSON-serializable value)
+- `vector`: The actual vector data as an array
+
 ##### `async getIndexStats()`
 
 Retrieves statistics about the database.

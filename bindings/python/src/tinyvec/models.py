@@ -50,6 +50,25 @@ class UpdateItem:
 
 
 @dataclass
+class PaginationConfig:
+    skip: int
+    limit: int
+
+    def __post_init__(self):
+        if self.skip < 0:
+            raise ValueError("Skip must be a positive number")
+        if self.limit <= 0:
+            raise ValueError("Limit must be a positive number")
+
+
+@dataclass
+class PaginationItem:
+    id: int
+    metadata: JsonValue
+    vector: list[float]
+
+
+@dataclass
 class UpdateResult:
     updated_count: int
     success: bool

@@ -511,6 +511,10 @@ DBSearchResult *get_top_k(const char *file_path, const float *query_vec, const i
             // Get pointer to start of vector+id block
             float *vec_block = vec_buffer + (j * (header_info->dimensions + 1));
 
+            // FUTURE USE memcpy
+            // int32_t metadata_id;
+            // memcpy(&metadata_id, vec_block, sizeof(int32_t));
+
             // Extract metadata ID from first float
             int metadata_id = (int)vec_block[0];
 

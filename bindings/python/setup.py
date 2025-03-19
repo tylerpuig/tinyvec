@@ -31,7 +31,7 @@ class CustomBuildExt(build_ext):
         print(f"Setup directory: {setup_dir}")
 
         sources = ['db.c', 'minheap.c', 'distance.c',
-                   'file.c', 'cJSON.c', 'sqlite3.c', 'utils.c', 'query_convert.c']
+                   'file.c', 'cJSON.c', 'sqlite3.c', 'utils.c', 'query_convert.c', 'paginate.c']
         source_paths = [os.path.join(
             setup_dir, 'src', 'core', 'src', src) for src in sources]
 
@@ -329,7 +329,7 @@ class CustomBdistWheel(bdist_wheel):
 
 setup(
     name="tinyvecdb",
-    version="0.2.3",
+    version="0.2.4",
     description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,
