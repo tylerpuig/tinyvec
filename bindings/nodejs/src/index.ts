@@ -321,4 +321,6 @@ export type {
   JsonValue,
   TinyVecSearchOptions,
   UpdateItem,
+  PaginationConfig,
+  PaginationItem,
 } from "./types";

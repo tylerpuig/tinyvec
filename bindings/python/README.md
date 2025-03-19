@@ -268,6 +268,51 @@ result = await client.update_by_id(update_items)
 print(f"Updated {result.updated_count} entries. Success: {result.success}")
 ```
 
+##### `async get_paginated(config)`
+
+Retrieves database entries with pagination support.
+
+**Parameters:**
+
+- `config`: `PaginationConfig` - Configuration object containing skip and limit parameters for pagination
+
+**Returns:**
+
+- `List[PaginationItem]` - List of paginated items, each containing ID, metadata, and vector data
+
+**Example:**
+
+```python
+import tinyvec
+
+# Create a pagination configuration
+config = tinyvec.PaginationConfig(skip=0, limit=10)
+
+# Retrieve paginated results
+paginated_results = await client.get_paginated(config)
+print(f"Retrieved {len(paginated_results)} items")
+
+# Process the results
+for item in paginated_results:
+    print(f"ID: {item.id}, Metadata: {item.metadata}")
+
+# Get the next page
+next_config = tinyvec.PaginationConfig(skip=10, limit=10)
+next_page = await client.get_paginated(next_config)
+print(f"Next page has {len(next_page)} items")
+```
+
+The `PaginationConfig` class accepts two parameters:
+
+- `skip`: Number of items to skip (must be non-negative)
+- `limit`: Maximum number of items to return (must be positive)
+
+Each returned `PaginationItem` contains:
+
+- `id`: Unique identifier for the vector
+- `metadata`: Associated metadata (as a JSON-serializable value)
+- `vector`: The actual vector data as a list of floats
+
 ##### `async get_index_stats()`
 
 Retrieves statistics about the database.
