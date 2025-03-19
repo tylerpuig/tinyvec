@@ -329,7 +329,7 @@ class CustomBdistWheel(bdist_wheel):
 
 setup(
     name="tinyvecdb",
-    version="0.2.3",
+    version="0.2.4",
     description="TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
     cmdclass={
         'build_ext': CustomBuildExt,
