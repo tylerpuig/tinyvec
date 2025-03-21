@@ -259,6 +259,12 @@ void normalize_vector(float *arr, uint32_t length)
         return;
     }
 
+    // If the array is already normalized within a small tolerance, skip normalization
+    if (sum_squares > 0.99995f && sum_squares < 1.00005f)
+    {
+        return;
+    }
+
     // Calculate the normalization factor (1/sqrt(sum_squares))
     float norm_factor = 1.0f / sqrtf(sum_squares);
 
