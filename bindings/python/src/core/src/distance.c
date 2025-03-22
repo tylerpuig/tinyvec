@@ -253,14 +253,8 @@ void normalize_vector(float *arr, uint32_t length)
         sum_squares += arr[i] * arr[i];
     }
 
-    // If the array is all zeros or very close to zero, avoid division by zero
-    if (sum_squares < 1e-10)
-    {
-        return;
-    }
-
-    // If the array is already normalized within a small tolerance, skip normalization
-    if (sum_squares > 0.99995f && sum_squares < 1.00005f)
+    // If sum_squares is close to 0 or 1 (already normalized), skip normalization
+    if (sum_squares < 1e-10 || (sum_squares > 0.99995f && sum_squares < 1.00005f))
     {
         return;
     }
