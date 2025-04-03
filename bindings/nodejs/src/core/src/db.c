@@ -931,6 +931,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     fflush(vec_file);
     fclose(vec_file);
     vec_file = NULL;
+    connection->vec_file = NULL;
 
     // Free all allocated resources in reverse order of allocation
     free(vec_buffer);
