@@ -792,20 +792,12 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
                 const size_t vec_count, const uint32_t dimensions)
 {
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
-    if (!connection || !connection->sqlite_db)
+    if (!connection || !connection->sqlite_db || !connection->vec_file)
         return 0;
 
-    char *temp_vec_file_path = malloc(strlen(file_path) + 6);
-    if (!temp_vec_file_path)
-    {
-        return 0;
-    }
-    sprintf(temp_vec_file_path, "%s.temp", file_path);
-
-    FILE *vec_file = fopen(temp_vec_file_path, "r+b");
+    FILE *vec_file = connection->vec_file;
     if (!vec_file)
     {
-        free(temp_vec_file_path);
         return 0;
     }
 
@@ -814,7 +806,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     {
         printf("Failed to get vector file header info\n");
         fclose(vec_file);
-        free(temp_vec_file_path);
         return 0;
     }
 
@@ -836,7 +827,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         free(header_info);
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
         fclose(vec_file);
-        free(temp_vec_file_path);
         return 0;
     }
 
@@ -852,7 +842,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         free(vec_buffer);
         free(header_info);
         fclose(vec_file);
-        free(temp_vec_file_path);
         return 0;
     }
 
@@ -866,7 +855,6 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
         sqlite3_exec(connection->sqlite_db, "ROLLBACK;", 0, 0, NULL);
         free(header_info);
         fclose(vec_file);
-        free(temp_vec_file_path);
         return 0;
     }
 
@@ -943,11 +931,11 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
     fflush(vec_file);
     fclose(vec_file);
     vec_file = NULL;
+    connection->vec_file = NULL;
 
     // Free all allocated resources in reverse order of allocation
     free(vec_buffer);
     free(header_info);
-    free(temp_vec_file_path);
 
     return inserted_count;
 }

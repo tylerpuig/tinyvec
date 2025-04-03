@@ -516,3 +516,26 @@ Interface representing database statistics.
 const stats = await client.getIndexStats();
 console.log(`Vector count: ${stats.vectors}, Dimensions: ${stats.dimensions}`);
 ```
+
+## Using TinyVecDB with Next.js
+
+If you're using TinyVecDB in a Next.js application, you'll need to add the following configuration to your `next.config.js` file to ensure proper functionality:
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // This prevents Next.js from bundling TinyVecDB and allows it to work correctly on the server
+  serverExternalPackages: ["tinyvecdb"],
+
+  // Your other Next.js configuration options...
+};
+
+module.exports = nextConfig;
+```
+
+This configuration is required because TinyVecDB uses native Node.js addons which cannot be bundled by Next.js. The `serverExternalPackages` option tells Next.js to load TinyVecDB directly from the Node.js environment on the server instead of trying to bundle it.
+
+### Important Notes:
+
+- TinyVecDB can only be used in server-side code
+- For older Next.js versions, you may need to use `experimental.serverComponentsExternalPackages` instead

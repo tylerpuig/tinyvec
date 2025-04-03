@@ -132,9 +132,6 @@ class TinyVecClient:
             if dimensions == 0:
                 dimensions = len(vectors[0].vector)
 
-            base_path = self.file_path
-            temp_file_path = f"{base_path}.temp"
-
             if not self.file_path:
                 raise ValueError("File path is not set")
 
@@ -180,9 +177,6 @@ class TinyVecClient:
             if vec_count == 0:
                 return 0
             try:
-                # Copy temp file
-
-                shutil.copyfile(self.file_path, temp_file_path)
 
                 # Create array of pointers to float arrays
                 vec_array = (ctypes.POINTER(ctypes.c_float) * vec_count)()
@@ -219,20 +213,13 @@ class TinyVecClient:
                 if inserted <= 0:
                     return 0
 
-                # Rename temp file to original
-                os.replace(temp_file_path, self.file_path)
-
                 # Update DB file connection
                 lib.update_db_file_connection(self.encoded_path)
 
                 return inserted
             except Exception as e:
                 raise e
-            finally:
-                try:
-                    os.unlink(temp_file_path)
-                except FileNotFoundError:
-                    pass
+
         return await asyncio.get_event_loop().run_in_executor(
             self.executor,
             insert_data

@@ -92,7 +92,6 @@ class TinyVecClient {
 
   async insert(data: tinyvecTypes.TinyVecInsertion[]): Promise<number> {
     if (!data || !data.length) return 0;
-    const tempFilePath = `${this.filePath}.temp`;
     try {
       const indexStats = await nativeGetIndexStats(this.filePath);
       if (indexStats.dimensions === 0) {
@@ -129,9 +128,6 @@ class TinyVecClient {
         }
       });
 
-      // Copy original files to temp
-      await fsPromises.copyFile(this.filePath, tempFilePath);
-
       // Insert data
       const inserted = await nativeInsert(
         this.filePath,
@@ -143,19 +139,12 @@ class TinyVecClient {
         return 0;
       }
 
-      // Rename of temp file to original
-      await fsPromises.rename(tempFilePath, this.filePath);
-
       // Update DB file connection
       nativeUpdateDbFileConnection(this.filePath);
 
       return inserted;
     } catch (error) {
       throw error;
-    } finally {
-      // Clean up temp files regardless of success or failure
-
-      await fsPromises.unlink(tempFilePath).catch(() => {});
     }
   }
 
