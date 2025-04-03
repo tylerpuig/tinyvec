@@ -792,7 +792,7 @@ int insert_data(const char *file_path, float **vectors, char **metadatas, size_t
                 const size_t vec_count, const uint32_t dimensions)
 {
     TinyVecConnection *connection = get_tinyvec_connection(file_path);
-    if (!connection || !connection->sqlite_db)
+    if (!connection || !connection->sqlite_db || !connection->vec_file)
         return 0;
 
     // char *temp_vec_file_path = malloc(strlen(file_path) + 6);
