@@ -132,8 +132,6 @@ class TinyVecClient:
             if dimensions == 0:
                 dimensions = len(vectors[0].vector)
 
-            base_path = self.file_path
-
             if not self.file_path:
                 raise ValueError("File path is not set")
 

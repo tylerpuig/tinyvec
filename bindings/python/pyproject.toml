@@ -1,7 +1,7 @@
 [project]
 name = "tinyvecdb"
 keywords = ["vector", "database", "similarity", "search", "vector database", "tinyvec", "vector search", "similarity search"]
-version = "0.2.4"
+version = "0.2.5"
 description = "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search."
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -49,7 +49,7 @@ twine = "^6.1.0"
 
 [tool.poetry]
 name = "tinyvecdb"
-version = "0.2.4"
+version = "0.2.5"
 description = "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search."
 authors = ["tylerpuig"]
 readme = "README.md"

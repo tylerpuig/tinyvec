@@ -1,6 +1,6 @@
 {
   "name": "tinyvecdb",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "TinyVecDB is a high performance, lightweight, embedded vector database for similarity search.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
